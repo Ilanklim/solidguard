@@ -1,24 +1,18 @@
 [project]
-name = "template-repo"
-version = "0.1.0"
-description = "Add your description here"
+name = "solidguard-backend"
+version = "1.0.0"
+description = "SolidGuard vulnerability classifier + generator backend"
 readme = "README.md"
 requires-python = ">=3.13"
+
 dependencies = [
     "anthropic>=0.74.0",
     "chatlas>=0.13.2",
     "dotenv>=0.9.9",
     "fastapi>=0.123.4",
     "openai>=2.8.1",
-    "pandas>=2.3.2",
-    "plotnine>=0.15.0",
     "pydantic>=2.12.4",
     "python-dotenv>=1.2.1",
-    "quarto-cli>=1.8.26",
-    "scikit-learn>=1.7.1",
-    "seaborn>=0.13.2",
-    "shiny>=1.5.0",
-    "shinychat>=0.2.8",
     "slither-analyzer>=0.11.3",
     "tiktoken>=0.12.0",
     "uv>=0.9.14",
