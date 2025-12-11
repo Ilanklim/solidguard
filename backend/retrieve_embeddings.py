@@ -16,7 +16,8 @@ from openai import OpenAI
 # ------------------------------------------
 # CONFIG
 # ------------------------------------------
-ROOT = Path(__file__).resolve().parents[1]   # backend/
+ROOT = Path(__file__).resolve().parents[1]
+LOCAL_ROOT = Path(__file__).resolve().parents[0]   # backend/
 STORE_PATH = ROOT / "knowledge_store.jsonl"
 EMBED_MODEL = "text-embedding-3-large"
 
