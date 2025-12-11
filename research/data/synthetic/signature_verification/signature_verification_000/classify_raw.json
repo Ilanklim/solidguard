@@ -1,0 +1,18 @@
+{
+  "id": "signature_verification_000",
+  "solidity": "^0.8.20",
+  "attacks": [
+    {
+      "type": "signature_verification",
+      "severity": "high",
+      "lines": [
+        14,
+        15,
+        16,
+        17
+      ],
+      "description": "The signature verification relies on a simple hash of user, amount, and nonce without domain separation or contract-specific data, making signatures potentially replayable across different contracts or contexts.",
+      "refs": null
+    }
+  ]
+}

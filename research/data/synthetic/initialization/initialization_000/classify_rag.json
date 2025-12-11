@@ -1,0 +1,26 @@
+{
+  "id": "initialization_000",
+  "solidity": "^0.8.20",
+  "attacks": [
+    {
+      "type": "initialization",
+      "severity": "high",
+      "lines": [
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "description": "The contract lacks a constructor-based or access-controlled initialization, allowing any user to call the initialization function and set themselves as owner.",
+      "refs": [
+        "initialization::nethermd_initialization_bugs.txt::chunk_0",
+        "initialization::nethermd_initialization_bugs.txt::chunk_1",
+        "initialization::updated_delegate_call_to_untrusted_callee.txt::chunk_0",
+        "initialization::updated_delegate_call_to_untrusted_callee.txt::chunk_2",
+        "initialization::updated_delegate_call_to_untrusted_callee.txt::chunk_5"
+      ]
+    }
+  ]
+}

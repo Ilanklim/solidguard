@@ -1,0 +1,22 @@
+{
+  "file": "data/synthetic/denial_of_service/denial_of_service_000/slither.json",
+  "vulnerabilities": [
+    {
+      "slither_check": "calls-loop",
+      "category": "denial_of_service",
+      "severity": "low",
+      "confidence": "Medium",
+      "description": "DenialOfService000.distribute() (data/synthetic/denial_of_service/denial_of_service_000/malicious.sol#24-31) has external calls inside a loop: address(recipients[i]).transfer(amount) (data/synthetic/denial_of_service/denial_of_service_000/malicious.sol#29)",
+      "lines": [
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31
+      ]
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "file": "data/synthetic/front_running/front_running_000/slither.json",
+  "vulnerabilities": [
+    {
+      "slither_check": "timestamp",
+      "category": "front_running",
+      "severity": "low",
+      "confidence": "Medium",
+      "description": "FrontRunningAuction.endAuction() (data/synthetic/front_running/front_running_000/malicious.sol#35-40) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- require(bool,string)(block.timestamp >= auctionEndTime,Auction still ongoing) (data/synthetic/front_running/front_running_000/malicious.sol#37)",
+      "lines": [
+        35,
+        36,
+        37,
+        38,
+        39,
+        40
+      ]
+    },
+    {
+      "slither_check": "timestamp",
+      "category": "front_running",
+      "severity": "low",
+      "confidence": "Medium",
+      "description": "FrontRunningAuction.placeBid() (data/synthetic/front_running/front_running_000/malicious.sol#16-25) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- require(bool,string)(block.timestamp < auctionEndTime,Auction ended) (data/synthetic/front_running/front_running_000/malicious.sol#17)",
+      "lines": [
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25
+      ]
+    }
+  ]
+}

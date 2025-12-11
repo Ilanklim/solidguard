@@ -1,0 +1,17 @@
+{
+  "id": "arithmetic_000",
+  "solidity": "^0.8.20",
+  "attacks": [
+    {
+      "type": "arithmetic",
+      "severity": "high",
+      "lines": [
+        11,
+        12,
+        13
+      ],
+      "description": "The withdrawal function subtracts the requested amount from the balance without checking sufficiency, allowing underflow and unauthorized withdrawals.",
+      "refs": null
+    }
+  ]
+}

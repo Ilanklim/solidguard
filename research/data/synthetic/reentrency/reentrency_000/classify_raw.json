@@ -1,0 +1,20 @@
+{
+  "id": "reentrancy_000",
+  "solidity": "^0.8.20",
+  "attacks": [
+    {
+      "type": "reentrancy",
+      "severity": "high",
+      "lines": [
+        16,
+        17,
+        18,
+        19,
+        20,
+        21
+      ],
+      "description": "The withdraw function sends Ether to msg.sender before updating the user's balance, enabling a reentrancy attack to drain funds.",
+      "refs": null
+    }
+  ]
+}

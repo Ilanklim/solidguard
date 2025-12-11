@@ -1,0 +1,33 @@
+{
+  "id": "initialization_000",
+  "solidity": "^0.8.20",
+  "attacks": [
+    {
+      "type": "initialization",
+      "severity": "high",
+      "lines": [
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "description": "The initialize function lacks an access control or one-time initialization guard, allowing any user to become the owner at any time.",
+      "refs": null
+    },
+    {
+      "type": "access_control",
+      "severity": "high",
+      "lines": [
+        5,
+        8,
+        9,
+        13,
+        14
+      ],
+      "description": "Ownership is set via an unprotected initialize function, enabling arbitrary users to gain access to privilegedFunction.",
+      "refs": null
+    }
+  ]
+}

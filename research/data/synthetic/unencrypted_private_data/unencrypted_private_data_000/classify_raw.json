@@ -1,0 +1,21 @@
+{
+  "id": "unencrypted_private_data_000",
+  "solidity": "^0.8.20",
+  "attacks": [
+    {
+      "type": "unencrypted_private_data",
+      "severity": "medium",
+      "lines": [
+        4,
+        5,
+        6,
+        8,
+        9,
+        12,
+        13
+      ],
+      "description": "User secrets are stored on-chain in plaintext and exposed via a getter, so the 'private' keyword does not prevent other parties from reading them from the blockchain.",
+      "refs": null
+    }
+  ]
+}

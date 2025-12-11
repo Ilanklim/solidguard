@@ -1,0 +1,22 @@
+{
+  "id": "unprotected_self_destruct_000",
+  "solidity": "^0.8.20",
+  "attacks": [
+    {
+      "type": "unprotected_self_destruct",
+      "severity": "high",
+      "lines": [
+        24,
+        25
+      ],
+      "description": "The contract exposes an unprotected self-destruct function that any caller can use to permanently destroy the contract and redirect its funds.",
+      "refs": [
+        "unprotected_self_destruct::updated_unprotexted_self_destruct.txt::chunk_5",
+        "unprotected_self_destruct::updated_unprotexted_self_destruct.txt::chunk_2",
+        "unprotected_self_destruct::updated_unprotexted_self_destruct.txt::chunk_3",
+        "unprotected_self_destruct::updated_unprotexted_self_destruct.txt::chunk_0",
+        "unprotected_self_destruct::swc_unprotected_self_destruct.txt::chunk_0"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "id": "unchecked_return_value_000",
+  "solidity": "^0.8.20",
+  "attacks": [
+    {
+      "type": "unchecked_return_value",
+      "severity": "high",
+      "lines": [
+        20,
+        21,
+        22,
+        24
+      ],
+      "description": "The low-level call to the trusted recipient does not check the returned success flag, causing silent payment failures and inconsistent state between emitted events and actual transfers.",
+      "refs": null
+    }
+  ]
+}

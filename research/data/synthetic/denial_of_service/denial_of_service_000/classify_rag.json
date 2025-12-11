@@ -1,0 +1,25 @@
+{
+  "id": "denial_of_service_000",
+  "solidity": "^0.8.20",
+  "attacks": [
+    {
+      "type": "denial_of_service",
+      "severity": "high",
+      "lines": [
+        24,
+        25,
+        26,
+        28,
+        29
+      ],
+      "description": "The distribute function sends funds to all recipients in a single loop using transfer, so a reverting or non-payable recipient can cause the entire distribution to fail and block payouts to all users.",
+      "refs": [
+        "denial_of_service::updated_dos_with_block_gas_limit.txt::chunk_2",
+        "denial_of_service::updated_dos_with_failed_call.txt::chunk_2",
+        "denial_of_service::updated_dos_with_block_gas_limit.txt::chunk_4",
+        "denial_of_service::updated_dos_with_block_gas_limit.txt::chunk_5",
+        "denial_of_service::updated_dos_with_failed_call.txt::chunk_5"
+      ]
+    }
+  ]
+}

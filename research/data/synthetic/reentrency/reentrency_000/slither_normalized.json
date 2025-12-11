@@ -1,0 +1,20 @@
+{
+  "file": "data/synthetic/reentrancy/reentrancy_000/slither.json",
+  "vulnerabilities": [
+    {
+      "slither_check": "reentrancy-eth",
+      "category": "reentrancy",
+      "severity": "high",
+      "confidence": "Medium",
+      "description": "Reentrancy in reentrancy000.withdraw(uint256) (data/synthetic/reentrancy/reentrancy_000/malicious.sol#16-21):\n\tExternal calls:\n\t- (sent,None) = msg.sender.call{value: amount}() (data/synthetic/reentrancy/reentrancy_000/malicious.sol#18)\n\tState variables written after the call(s):\n\t- balances[msg.sender] -= amount (data/synthetic/reentrancy/reentrancy_000/malicious.sol#20)\n\treentrancy000.balances (data/synthetic/reentrancy/reentrancy_000/malicious.sol#5) can be used in cross function reentrancies:\n\t- reentrancy000.balances (data/synthetic/reentrancy/reentrancy_000/malicious.sol#5)\n\t- reentrancy000.deposit() (data/synthetic/reentrancy/reentrancy_000/malicious.sol#7-10)\n\t- reentrancy000.getBalance(address) (data/synthetic/reentrancy/reentrancy_000/malicious.sol#12-14)\n\t- reentrancy000.withdraw(uint256) (data/synthetic/reentrancy/reentrancy_000/malicious.sol#16-21)",
+      "lines": [
+        16,
+        17,
+        18,
+        19,
+        20,
+        21
+      ]
+    }
+  ]
+}

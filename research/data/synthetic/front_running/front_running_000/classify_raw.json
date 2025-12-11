@@ -1,0 +1,19 @@
+{
+  "id": "front_running_000",
+  "solidity": "^0.8.20",
+  "attacks": [
+    {
+      "type": "front_running",
+      "severity": "medium",
+      "lines": [
+        16,
+        17,
+        18,
+        23,
+        24
+      ],
+      "description": "The bidding mechanism allows an observer to front-run another user's transaction by submitting a slightly higher bid before it is mined, unfairly outbidding them.",
+      "refs": null
+    }
+  ]
+}

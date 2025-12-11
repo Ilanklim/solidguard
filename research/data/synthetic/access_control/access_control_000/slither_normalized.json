@@ -1,0 +1,19 @@
+{
+  "file": "data/synthetic/access_control/access_control_000/slither.json",
+  "vulnerabilities": [
+    {
+      "slither_check": "arbitrary-send-eth",
+      "category": "access_control",
+      "severity": "high",
+      "confidence": "Medium",
+      "description": "AccessVault.withdraw(uint256) (data/synthetic/access_control/access_control_000/malicious.sol#16-20) sends eth to arbitrary user\n\tDangerous calls:\n\t- address(msg.sender).transfer(amount) (data/synthetic/access_control/access_control_000/malicious.sol#18)",
+      "lines": [
+        16,
+        17,
+        18,
+        19,
+        20
+      ]
+    }
+  ]
+}

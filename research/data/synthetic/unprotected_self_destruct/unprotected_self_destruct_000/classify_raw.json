@@ -1,0 +1,16 @@
+{
+  "id": "unprotected_self_destruct_000",
+  "solidity": "^0.8.20",
+  "attacks": [
+    {
+      "type": "unprotected_self_destruct",
+      "severity": "high",
+      "lines": [
+        24,
+        25
+      ],
+      "description": "The destroy function allows any caller to trigger self-destruction and redirect all contract funds to an arbitrary address without access control.",
+      "refs": null
+    }
+  ]
+}

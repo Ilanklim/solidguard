@@ -1,0 +1,18 @@
+{
+  "id": "access_control_000",
+  "solidity": "^0.8.20",
+  "attacks": [
+    {
+      "type": "access_control",
+      "severity": "high",
+      "lines": [
+        16,
+        17,
+        18,
+        19
+      ],
+      "description": "The withdraw function lacks access control or balance accounting per user, allowing any caller to withdraw arbitrary funds from the contract balance.",
+      "refs": null
+    }
+  ]
+}

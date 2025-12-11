@@ -1,0 +1,25 @@
+{
+  "id": "front_running_000",
+  "solidity": "^0.8.20",
+  "attacks": [
+    {
+      "type": "front_running",
+      "severity": "medium",
+      "lines": [
+        16,
+        17,
+        18,
+        23,
+        24
+      ],
+      "description": "The auction relies on being the first to submit a higher bid before auctionEndTime, making the outcome dependent on transaction ordering and thus vulnerable to front-running by bidders who can observe and outbid pending transactions in the mempool.",
+      "refs": [
+        "front_running::updated_transaction_order_dependence.txt::chunk_2",
+        "front_running::updated_transaction_order_dependence.txt::chunk_0",
+        "front_running::updated_transaction_order_dependence.txt::chunk_3",
+        "access_control::swc_unprotected_ether_withdrawal.txt::chunk_1",
+        "denial_of_service::nethermd_dos_errors.txt::chunk_1"
+      ]
+    }
+  ]
+}

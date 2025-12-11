@@ -1,0 +1,22 @@
+{
+  "id": "unchecked_return_value_000",
+  "solidity": "^0.8.20",
+  "attacks": [
+    {
+      "type": "unchecked_return_value",
+      "severity": "medium",
+      "lines": [
+        20,
+        24
+      ],
+      "description": "The low-level call used to send funds has its boolean return value ignored, so failures are silently ignored and payments may not actually be delivered.",
+      "refs": [
+        "unchecked_return_value::updated_unchecked_return_value.txt::chunk_3",
+        "denial_of_service::updated_dos_with_failed_call.txt::chunk_1",
+        "unchecked_return_value::updated_unchecked_return_value.txt::chunk_4",
+        "access_control::updated2_unprotected_ether_withdrawal.txt::chunk_1",
+        "denial_of_service::updated_dos_with_failed_call.txt::chunk_2"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "id": "access_control_000",
+  "solidity": "^0.8.20",
+  "attacks": [
+    {
+      "type": "access_control",
+      "severity": "high",
+      "lines": [
+        16,
+        17,
+        18,
+        19
+      ],
+      "description": "The withdraw function lacks any sender authorization or balance tracking, allowing any caller to withdraw arbitrary funds from the contract as long as the contract balance is sufficient.",
+      "refs": [
+        "access_control::updated2_unprotected_ether_withdrawal.txt::chunk_10",
+        "access_control::updated2_unprotected_ether_withdrawal.txt::chunk_8",
+        "access_control::updated_unprotected_ether_withdrawal.txt::chunk_6",
+        "access_control::updated2_unprotected_ether_withdrawal.txt::chunk_0",
+        "access_control::updated_write_to_arbitrary_storage_location.txt::chunk_6"
+      ]
+    }
+  ]
+}

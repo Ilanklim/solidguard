@@ -1,0 +1,5 @@
+{
+  "id": "signature_verification_000",
+  "solidity": "^0.8.20",
+  "attacks": null
+}

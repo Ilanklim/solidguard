@@ -1,0 +1,27 @@
+{
+  "id": "unencrypted_private_data_000",
+  "solidity": "^0.8.20",
+  "attacks": [
+    {
+      "type": "unencrypted_private_data",
+      "severity": "high",
+      "lines": [
+        4,
+        5,
+        6,
+        8,
+        9,
+        12,
+        13
+      ],
+      "description": "The contract stores user secrets in a private mapping as plaintext on-chain, which is fully readable by anyone despite the private visibility.",
+      "refs": [
+        "unencrypted_private_data::updated_unencrypted_private_data_on_chain.txt::chunk_3",
+        "unencrypted_private_data::updated_unencrypted_private_data_on_chain.txt::chunk_0",
+        "unencrypted_private_data::updated_unencrypted_private_data_on_chain.txt::chunk_2",
+        "unencrypted_private_data::updated_unencrypted_private_data_on_chain.txt::chunk_1",
+        "unencrypted_private_data::src_unencrypted_private_data_on_chain.txt::chunk_0"
+      ]
+    }
+  ]
+}

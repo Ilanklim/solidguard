@@ -1,0 +1,20 @@
+{
+  "id": "denial_of_service_000",
+  "solidity": "^0.8.20",
+  "attacks": [
+    {
+      "type": "denial_of_service",
+      "severity": "high",
+      "lines": [
+        24,
+        25,
+        26,
+        27,
+        28,
+        29
+      ],
+      "description": "The distribute function sends funds to each recipient in a loop using transfer, so a single recipient with a reverting fallback can block the entire distribution and cause a denial of service.",
+      "refs": null
+    }
+  ]
+}

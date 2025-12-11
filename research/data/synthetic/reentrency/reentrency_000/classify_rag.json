@@ -1,0 +1,25 @@
+{
+  "id": "reentrancy_000",
+  "solidity": "^0.8.20",
+  "attacks": [
+    {
+      "type": "reentrancy",
+      "severity": "high",
+      "lines": [
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "description": "The withdraw function sends Ether to an external address before updating the sender's balance, enabling a classic reentrancy attack to drain funds.",
+      "refs": [
+        "reentrancy::nethermd_reentrancy.txt::chunk_1",
+        "reentrancy::updated_reentrancy_from_nether_owasp.txt::chunk_3",
+        "reentrancy::updated_reentrancy_from_nether_owasp.txt::chunk_2",
+        "reentrancy::owasp_reentrancy.txt::chunk_0",
+        "reentrancy::owasp_reentrancy.txt::chunk_1"
+      ]
+    }
+  ]
+}

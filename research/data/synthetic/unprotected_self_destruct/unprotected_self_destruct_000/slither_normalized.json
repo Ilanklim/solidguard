@@ -1,0 +1,32 @@
+{
+  "file": "data/synthetic/unprotected_self_destruct/unprotected_self_destruct_000/slither.json",
+  "vulnerabilities": [
+    {
+      "slither_check": "suicidal",
+      "category": "unprotected_self_destruct",
+      "severity": "high",
+      "confidence": "High",
+      "description": "UnprotectedSelfDestruct000.destroy(address) (data/synthetic/unprotected_self_destruct/unprotected_self_destruct_000/malicious.sol#24-26) allows anyone to destruct the contract",
+      "lines": [
+        24,
+        25,
+        26
+      ]
+    },
+    {
+      "slither_check": "events-maths",
+      "category": null,
+      "severity": "low",
+      "confidence": "Medium",
+      "description": "UnprotectedSelfDestruct000.withdraw(uint256) (data/synthetic/unprotected_self_destruct/unprotected_self_destruct_000/malicious.sol#17-22) should emit an event for: \n\t- value -= amount (data/synthetic/unprotected_self_destruct/unprotected_self_destruct_000/malicious.sol#20)",
+      "lines": [
+        17,
+        18,
+        19,
+        20,
+        21,
+        22
+      ]
+    }
+  ]
+}
