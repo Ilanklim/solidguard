@@ -22,9 +22,8 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 # Load environment
-ROOT = Path(__file__).resolve().parents[1]
-RELATIVE_ROOT = Path(__file__).resolve().parents[0]
-load_dotenv(RELATIVE_ROOT / ".env")
+LOCAL_ROOT = Path(__file__).resolve().parents[0]
+load_dotenv(LOCAL_ROOT / ".env")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
     raise RuntimeError("OPENAI_API_KEY is missing in environment!")
@@ -47,12 +46,12 @@ ALLOWED_ATTACK_TYPES = [
     "unprotected_self_destruct",
 ]
 
-RAW_PROMPT = (RELATIVE_ROOT / "prompts" / "classify_raw.txt").read_text(encoding="utf-8")
-RAG_PROMPT = (RELATIVE_ROOT / "prompts" / "classify_rag.txt").read_text(encoding="utf-8")
+RAW_PROMPT = (LOCAL_ROOT / "prompts" / "classify_raw.txt").read_text(encoding="utf-8")
+RAG_PROMPT = (LOCAL_ROOT / "prompts" / "classify_rag.txt").read_text(encoding="utf-8")
 
 # For RAG retrieval
 from retrieve_embeddings import KnowledgeStore  # noqa: E402
-KS = KnowledgeStore(path=RELATIVE_ROOT / "knowledge_store.jsonl")
+KS = KnowledgeStore(path=LOCAL_ROOT / "knowledge_store.jsonl")
 KS.load()
 
 

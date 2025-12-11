@@ -163,7 +163,7 @@ def parse_attack_type(text: str, fallback: str) -> str:
     return fallback
 
 
-def split_explanation_and_samples(text: str) -> (str, str):
+def split_explanation_and_samples(text: str):
     """
     Split doc into explanation vs samples sections.
 

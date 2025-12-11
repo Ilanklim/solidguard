@@ -3,14 +3,14 @@ from openai import OpenAI
 from dotenv import load_dotenv
 
 # ROOT = backend directory
-ROOT = Path(__file__).resolve().parents[0]
+LOCAL_ROOT = Path(__file__).resolve().parents[0]
 
 # Load .env
-load_dotenv(ROOT / ".env")
+load_dotenv(LOCAL_ROOT / ".env")
 
 client = OpenAI()
 
-PROMPT_PATH = ROOT / "prompts" / "generate_contracts.txt"
+PROMPT_PATH = LOCAL_ROOT / "prompts" / "generate_contracts.txt"
 print(PROMPT_PATH)
 if not PROMPT_PATH.exists():
     raise FileNotFoundError(f"Generation prompt not found: {PROMPT_PATH}")

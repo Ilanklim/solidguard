@@ -18,10 +18,10 @@ from openai import OpenAI
 # ------------------------------------------
 ROOT = Path(__file__).resolve().parents[1]
 LOCAL_ROOT = Path(__file__).resolve().parents[0]   # backend/
-STORE_PATH = ROOT / "knowledge_store.jsonl"
+STORE_PATH = LOCAL_ROOT / "knowledge_store.jsonl"
 EMBED_MODEL = "text-embedding-3-large"
 
-load_dotenv(ROOT / ".env")
+load_dotenv(LOCAL_ROOT / ".env")
 api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
     raise RuntimeError("Missing OPENAI_API_KEY in backend/.env")
