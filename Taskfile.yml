@@ -3,16 +3,14 @@ version: "3"
 tasks:
 
   setup:
-    desc: "Full environment setup: system tools + backend + frontend dependencies"
+    desc: "Install system dependencies"
     cmds:
       - echo "🔍 Checking system requirements..."
 
-      # ---------------------------
-      # Install uv
-      # ---------------------------
+      # uv
       - |
         if ! command -v uv >/dev/null 2>&1; then
-          echo "📦 Installing uv (Python env manager)..."
+          echo "📦 Installing uv..."
           if [[ "$OSTYPE" == "darwin"* ]]; then
             brew install uv
           else
@@ -22,9 +20,7 @@ tasks:
           echo "✅ uv already installed."
         fi
 
-      # ---------------------------
-      # Install Taskfile itself
-      # ---------------------------
+      # Taskfile
       - |
         if ! command -v task >/dev/null 2>&1; then
           echo "📦 Installing Taskfile..."
@@ -37,39 +33,25 @@ tasks:
           echo "✅ Taskfile already installed."
         fi
 
-      # ---------------------------
-      # Install Python / pip
-      # ---------------------------
+      # Python
       - |
         if ! command -v python3 >/dev/null 2>&1; then
-          echo "📦 Installing Python + pip..."
-          if [[ "$OSTYPE" == "darwin"* ]]; then
-            brew install python
-          else
-            sudo apt-get install python3 python3-pip -y
-          fi
+          echo "📦 Installing Python..."
+          brew install python
         else
           echo "✅ Python already installed."
         fi
 
-      # ---------------------------
-      # Install Node.js (18+)
-      # ---------------------------
+      # Node.js
       - |
         if ! command -v node >/dev/null 2>&1; then
           echo "📦 Installing Node.js..."
-          if [[ "$OSTYPE" == "darwin"* ]]; then
-            brew install node
-          else
-            sudo apt-get install nodejs npm -y
-          fi
+          brew install node
         else
           echo "✅ Node.js already installed."
         fi
 
-      # ---------------------------
-      # Install Bun
-      # ---------------------------
+      # Bun
       - |
         if ! command -v bun >/dev/null 2>&1; then
           echo "📦 Installing Bun..."
@@ -82,13 +64,13 @@ tasks:
   install:
     desc: "Install backend + frontend dependencies"
     cmds:
-      - echo "📦 Installing backend Python dependencies..."
+      - echo "📦 Installing backend dependencies..."
       - uv sync
 
       - echo "📦 Installing frontend dependencies..."
       - cd frontend && bun install
 
-      - echo "✅ Installation complete."
+      - echo "✅ Installation complete!"
 
 
   backend:
@@ -96,58 +78,65 @@ tasks:
     dir: backend
     cmds:
       - echo "🚀 Starting backend at http://localhost:8000"
-      - uvicorn app:app --reload --host 0.0.0.0 --port 8000
+      - ../.venv/bin/uvicorn app:app --reload --host 0.0.0.0 --port 8000
+
+
 
   frontend:
-    desc: "Start React/Vite frontend"
+    desc: "Run Vite frontend"
     dir: frontend
     cmds:
       - echo "🚀 Starting frontend at http://localhost:8080"
       - bun dev
 
+
   open-browser:
-    desc: "Open browser to frontend automatically"
+    desc: "Open browser"
     cmds:
       - |
-        echo "🌐 Opening browser at http://localhost:8080 ..."
+        echo "🌐 Opening browser..."
         sleep 2
         if command -v open >/dev/null 2>&1; then
           open http://localhost:8080
         elif command -v xdg-open >/dev/null 2>&1; then
           xdg-open http://localhost:8080
-        else
-          echo "⚠️ Could not auto-open browser. Please navigate manually."
         fi
 
+
   app:
-    desc: "Run backend + frontend + auto-open browser"
+    desc: "Run full stack (backend + frontend)"
     cmds:
       - task backend &
       - task frontend &
       - task open-browser
       - wait
-  
+
+
   end:
-    desc: "Stop backend & frontend processes"
+    desc: "Cleanly stop backend + frontend"
     cmds:
-      - echo "🛑 Stopping backend & frontend..."
+      - echo "🛑 Stopping services..."
+
+      # Kill ONLY the uvicorn started by this project
       - |
         echo "🔪 Killing uvicorn..."
-        pkill -f "uvicorn" || true
+        pgrep -f "uvicorn app:app" | xargs kill -9 2>/dev/null || true
 
+      # Kill Python in this repo only
       - |
-        echo "🔪 Killing Python backend processes..."
-        pkill -f "python" || true
+        echo "🔪 Killing Python backend..."
+        pkill -f "/proj-02-extra-parliament/backend" || true
 
+      # Kill Bun/Vite only for this repo
       - |
-        echo "🔪 Killing bun/vite frontend..."
-        pkill -f "bun" || true
-        pkill -f "vite" || true
+        echo "🔪 Killing frontend..."
+        pgrep -f "bun dev" | xargs kill -9 2>/dev/null || true
+        pgrep -f "vite" | xargs kill -9 2>/dev/null || true
 
+      # Free ports
       - |
         echo "🧹 Freeing ports 8000 and 8080..."
         lsof -ti :8000 | xargs kill -9 2>/dev/null || true
         lsof -ti :8080 | xargs kill -9 2>/dev/null || true
 
       - echo "✅ All services stopped."
-
