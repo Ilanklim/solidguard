@@ -1,0 +1,315 @@
+---
+title: "SolidGuard: Smart Contract Vulnerability Analyzer"
+author: Ilan Klimberg, Nick Johnson, Stephan Volynets, Hunter Kline
+subtitle: "Report"
+format:
+  pdf:
+    toc: true
+    number-sections: true
+execute:
+  echo: false
+---
+
+# Introduction
+
+Smart contracts now secure billions of dollars in value, but many are still written and deployed by small teams without dedicated security engineers. A single vulnerability such as reentrancy, broken access control, or unchecked external calls can lead to irreversible loss of funds. Formal audits are expensive and slow, and most lightweight tools either require deep security expertise or only surface low-level static analysis warnings.
+
+Our goal in this project was to explore whether large language models (LLMs) can make smart-contract security more accessible by providing *human-readable* vulnerability analyses directly from Solidity source code. We built **SolidGuard**, a web application that lets a user:
+
+-   paste or type a Solidity contract,
+-   select a model (GPT-4.1-mini, GPT-4.1, GPT-5.1),
+-   choose between a pure LLM classifier (**RAW**) or a retrieval-augmented classifier (**RAG**),
+-   optionally toggle real-time analysis as they type, and
+-   generate synthetic vulnerable contracts for practice across ten common attack types.
+
+On the backend, we expose two main classification functions:
+
+-   `classify_raw_contract_text(contract_text, model="gpt-5.1")`
+-   `classify_rag_contract_text(contract_text, model="gpt-5.1", k=5)`
+
+Both return a structured JSON object with a list of detected attacks, line numbers, severities, and rationales. The RAG variant additionally attaches references into a curated knowledge base stored in `knowledge_store.jsonl`. A separate generator endpoint produces malicious contracts for a requested attack type via `generate_malicious_contract`.
+
+The central questions for this project are:
+
+1.  Can LLMs reliably map Solidity source code to a structured vulnerability schema without heavy preprocessing or static analysis tooling?
+2.  Does retrieval-augmented generation help ground model predictions in a reusable knowledge base of known vulnerability patterns?
+3.  What kind of product experience makes these capabilities usable for developers who are not professional auditors?
+
+The rest of the report focuses on how we turned these questions into a concrete product, the design decisions behind SolidGuard, and what we learned from integrating LLMs as the core of the system.
+
+# Justification of approach
+
+## Product overview
+
+SolidGuard is designed as a **single-page web application** with a code editor on the left and an analysis panel on the right. The main product surfaces are:
+
+-   **Model and mode selector.** A dropdown allows users to pick between GPT-4.1-mini, GPT-4.1, and GPT-5.1. A RAW/RAG toggle controls whether the backend uses `classify_raw_contract_text` or `classify_rag_contract_text`.
+-   **Code editor.** Users paste or type Solidity. The editor supports line numbering and, when analysis results are available, highlights vulnerable lines based on the `attacks` array returned by the backend.
+-   **Results panel.** For each detected vulnerability, the panel shows the attack type (e.g., `reentrancy`), severity, affected line range, and a natural-language explanation. When using RAG, we also show references back into the knowledge store (e.g., specific chunks and categories).
+-   **Contract generator.** A separate dropdown of ten attack types (access control, arithmetic, denial of service, front running, initialization, reentrancy, signature verification, unchecked return value, unencrypted private data, and unprotected self destruct) plus a “Generate Contract” button calls `generate_malicious_contract` to produce a fresh vulnerable example.
+-   **Real-time toggle.** When enabled, every edit triggers `useRealtimeAnalysis` with a debounce, so the user sees updated vulnerability markings almost continuously.
+
+The intended audience is **Solidity developers**, especially students and junior engineers who may not have access to full security audits but still want a first pass at potential issues. Our design emphasizes:
+
+-   low friction (paste code, click *Analyze*),
+-   human-readable explanations instead of only raw warnings, and
+-   a tight loop between learning (generated practice contracts) and applying (analyzing their own contracts).
+
+## Why LLMs and why this architecture?
+
+We considered three broad approaches:
+
+1.  **Traditional static analysis only** (e.g., running Slither or Mythril directly).
+2.  **Pure LLM classification** where the model reads the contract and outputs vulnerabilities as JSON.
+3.  **LLM + retrieval-augmented generation** where the model also sees curated vulnerability descriptions from a knowledge store.
+
+We chose **(2) and (3)** for this project for several reasons:
+
+-   The course focus is on LLM-centric products, and we wanted to see how far we could get using models directly on the raw source text.
+-   LLMs are good at *explaining* vulnerabilities in natural language, not just flagging them.
+-   By enforcing a JSON response (`response_format={"type": "json_object"}`) in `enforce_json_completion`, we can treat the LLM as a structured classifier whose output downstream components can consume.
+
+At the same time, we recognized that LLMs hallucinate and may not maintain stable terminology across contracts or prompts. This motivated the **RAG classifier**:
+
+-   `KnowledgeStore` loads embeddings from `knowledge_store.jsonl` and provides a `retrieve(query, k)` interface that returns the most similar vulnerability descriptions.
+-   In `classify_rag_contract_text`, we number contract lines, retrieve top‐k relevant knowledge chunks, and inject them into a RAG prompt section. We also attach `refs` for each attack to keep traceability back to the underlying documentation.
+
+The final architecture gives us three complementary capabilities:
+
+-   **RAW classification**: faster, cheaper, more flexible experimentation with prompts.
+-   **RAG classification**: more grounded analyses with explicit references.
+-   **Generation**: a way to bootstrap synthetic data and help users learn specific vulnerability classes.
+
+This combination better matches the needs of an educational and exploratory tool than any single approach alone.
+
+# Design process
+
+## System architecture
+
+We organized SolidGuard into a clear separation between backend, frontend, and shared configuration:
+
+-   **Backend (FastAPI).**
+    -   `app.py` exposes `/classify` and `/generate` endpoints. We centralize CORS configuration here and map public model names (`"gpt-4.1-mini"`, `"gpt-4.1"`, `"gpt-5.1"`) through `MODEL_MAPPING` so the frontend can remain decoupled from any future model renaming.
+    -   `contract_classifier.py` handles RAW and RAG classification. It loads prompts from `backend/prompts/classify_raw.txt` and `classify_rag.txt`, numbers contract lines, and calls the OpenAI Chat Completions API via `enforce_json_completion`. For RAG, it also constructs a block of retrieved documents and attaches `refs` to each attack.
+    -   `retrieve_embeddings.py` defines the `KnowledgeStore` class, which loads all records from `knowledge_store.jsonl`, stores their embeddings in a NumPy array, and implements cosine similarity retrieval.
+    -   `contract_generator.py` loads `generate_contracts.txt`, defines the ten fixed `ATTACK_TYPES`, and uses `generate_malicious_contract` to format prompts and extract both the JSON metadata block and the malicious contract body from model output.
+-   **Frontend (React + TypeScript, Vite + Bun).**
+    -   `App.tsx` orchestrates high-level state: contract text, mode (`"raw"`/`"rag"`), selected model, and real-time toggle.
+    -   `useAnalyzeContract`, `useGenerateContract`, and `useRealtimeAnalysis` custom hooks manage API calls to `/classify` and `/generate`, debounce behavior, and merging manual and real-time results.
+    -   Presentational components (`CodeEditor`, `ResultsPanel`, `GeneratePanel`, `ModeToggle`, `RealtimeToggle`) keep the UI modular and easier to reason about.
+
+We use `Taskfile.yml` to simplify environment management and developer onboarding:
+
+-   `task install` installs backend Python dependencies and frontend Bun packages.
+-   `task app` starts the backend and frontend in parallel and opens the browser.
+-   `task end` kills uvicorn, Python, and Bun/Vite processes and clears ports 8000 and 8080.
+
+This design makes it easy for another student or TA to run the entire system from the project root without worrying about individual commands.
+
+## Prompt and schema design
+
+Early in the project, we saw that free-form natural language answers from the LLM were too inconsistent to drive a product UI. We therefore committed to a **strict JSON schema** for both classification and generation tasks. Our prompts instruct the model to:
+
+-   output *only* JSON,
+-   use a fixed set of `"attack_type"` values to increase precision and validate our outputs against a subset of existing outside smart contracts `ALLOWED_ATTACK_TYPES`
+    -   "access_control",
+    -   "arithmetic",
+    -   "denial_of_service",
+    -   "front_running",
+    -   "initialization",
+    -   "reentrancy",
+    -   "signature_verification",
+    -   "unchecked_return_value",
+    -   "unencrypted_private_data",
+    -   "unprotected_self_destruct",
+-   we provide a `"severity"`, `"description"`, and `"lines"` field for each entry in `attacks`, and
+-   optionally include references (`"refs"`) for the RAG version returning the chunks from knowledge that the AI used for the propmt
+
+To enforce this contract, we wrote `enforce_json_completion`, which wraps the call to `client.chat.completions.create` with `response_format={"type": "json_object"}` and `temperature=0`. If parsing fails, we surface a clear error so we can iterate on the prompt.
+
+On the RAG side, the main design decisions were:
+
+-   **What to embed?** We decided to store pre-embedded chunks of vulnerability documentation and examples in `knowledge_store.jsonl`, with fields such as `category`, `attack_type`, `source_path`, `chunk_index`, `text`, and `embedding`.
+-   **How to present retrieved docs?** In `classify_rag_contract_text`, we build a structured block of `[DOC i | category=... | source=...]` followed by the chunk text, which makes it explicit to the model what context each document provides.
+-   **How to attach references?** After classification, we loop through `result["attacks"]` and set `attack["refs"] = rag_refs.copy()`, so each attack points back to the same set of relevant chunks. This is simple but guarantees traceability and enables the UI to later show “Based on: <file> chunk X”.
+
+## UI and interaction design
+
+On the frontend, our design process focused on giving users just enough control without overwhelming them:
+
+-   **Top toolbar.** We placed the model selector, RAW/RAG toggle, and real-time toggle together to reinforce that these options are related to “how” analysis is performed.
+-   **Defaults.** We default the mode to RAW, the model to GPT-5.1, and the generator’s attack type to `access_control`. This reflects our judgment of a good balance between quality and cost, while still giving users the option to trade off downwards (e.g., GPT-4.1-mini for cheaper experiments).
+-   **Panels.** The left panel is solely for code; the right panel is solely for analysis results. When the backend returns attacks, we pass them into `CodeEditor` as `attacks` and `newVulnerabilityLines` so the editor can highlight affected lines and give a sense of what changed in the latest run.
+-   **Real-time vs manual.** In `useRealtimeAnalysis`, we debounce calls by 300ms. `App.tsx` then decides whether to show `realtimeResult` (when real-time is enabled and a result is available) or fall back to the last manual `result` from the *Analyze* button. This avoids overwhelming the backend while preserving a responsive feel.
+-   **Process management.** Using `task app` and `task end` reduces friction during development sessions and ensures we don’t accidentally end up with multiple uvicorn or Vite instances fighting over ports.
+
+Throughout the design process, we iterated by:
+
+-   testing real contracts and verifying whether reported attack types made sense,
+-   adjusting prompts when the model hallucinated or omitted necessary fields, and
+-   tweaking UI labels and copy to be clear to someone who is not familiar with our codebase.
+
+# Limitations
+
+Despite building a functional and polished prototype, SolidGuard has several important limitations.
+
+## Technical limitations
+
+1.  **No formal guarantees.** Our classifier does not run static analysis or formal verification. It is entirely LLM-driven and thus prone to missing vulnerabilities or hallucinating non-existent ones. We partially mitigate this in the RAG pipeline by grounding responses in `knowledge_store.jsonl`, but the model can still misinterpret the contract.
+2.  **Limited evaluation.** Due to time constraints, we did not build a full benchmark of labeled contracts to compute precision, recall, or F1 scores across attack types. Our validation is largely qualitative based on inspection of generated contracts and a small set of manually chosen examples.
+3.  **Latency and cost.** Using GPT-5.1 and `text-embedding-3-large` is relatively expensive. Real-time analysis, even with a debounce, can generate many API calls in a short period. For a production setting, we would need rate limiting, caching, and potentially a cheaper default model plus only occasional use of higher-end models.
+4.  **Knowledge store coverage.** `knowledge_store.jsonl` is finite and curated; it does not cover every possible pattern or edge case across the Ethereum ecosystem. The RAG classifier can only be as good as both the model and the underlying knowledge store.
+5.  **Schema rigidity.** Our strict JSON schema is helpful for UI integration but can be brittle. If we later want to add new fields (e.g., suggested fixes, gas implications, or attack preconditions), we need to version the schema and update prompts and frontend parsing logic.
+
+## User experience and scope limitations
+
+1.  **Single-contract focus.** SolidGuard currently analyzes a single contract at a time. It does not understand multi-contract interactions, proxy patterns, or upgradeable architectures beyond what the model can infer from the source in the editor.
+2.  **No automatic remediation.** We only surface issues and explanations. We do not currently generate patches or safe rewrites, although the underlying LLM is capable of suggesting them.
+3.  **Educational positioning.** The tool is intentionally framed as an educational aid, not a substitute for professional audits. In a real deployment, we would need more explicit disclaimers and perhaps integration with static analyzers to combine strengths.
+4.  **Accessibility and performance.** While the UI feels responsive in local testing, we have not done systematic performance or accessibility audits (screen reader compatibility, keyboard navigation, etc.).
+
+## Future improvements
+
+If we had more time, we would prioritize:
+
+-   building a labeled evaluation set of real audited contracts and comparing SolidGuard’s output against both Slither and human annotations,
+-   adding a remediation mode where the model proposes line-level fixes with references and caveats,
+-   caching embeddings and classification results across sessions, and
+-   extending the knowledge store to cover more attack families and real-world post-mortems.
+
+# Generative AI reflection
+
+This project required us to use generative AI tools in two distinct ways: **as part of the product itself** and **as a development assistant**. Reflecting on both helped us understand LLM capabilities and limitations more deeply.
+
+## GAI as a core component of the product
+
+At the system level, our backend is essentially a thin orchestrator around OpenAI models:
+
+-   `classify_raw_contract_text` and `classify_rag_contract_text` frame the LLM as a JSON-emitting classifier. We learned to carefully design prompts and schemas so that the model’s output can be treated as structured data rather than plain text.
+-   `KnowledgeStore` uses OpenAI embeddings to turn `knowledge_store.jsonl` into a vector search engine. This gave us hands-on experience with embedding spaces, cosine similarity, and the practicalities of RAG (e.g., how many chunks to retrieve, how to format them in context, and how to attach references back to the UI).
+-   `generate_malicious_contract` treats the LLM as a data generator. We had to engineer the prompt and parsing logic (`parse_llm_output`) to reliably extract both a JSON metadata block and the malicious contract body demarcated by a marker comment.
+
+Working through prompt iterations and failure cases taught us several important lessons:
+
+-   **Schema discipline matters.** Without a strict schema and JSON-only instructions, even strong models occasionally mix commentary with data. `response_format={"type": "json_object"}` combined with our own parsing layer dramatically reduced this problem.
+-   **Grounding helps, but does not fully solve hallucination.** RAG provided more consistent terminology and better explanations, but the model can still over-generalize or slightly mislabel edge cases. We came away with a more realistic sense of RAG as a tool for *better-behaved* generation, not a guarantee of correctness.
+-   **Attack taxonomy needs to be explicit.** By defining `ALLOWED_ATTACK_TYPES` and validating attack types against this list in both classifier and generator code, we reduced ambiguity and made it easier to compare results across models and modes.
+
+## GAI as a development assistant
+
+We also used GAI (especially tools like ChatGPT) extensively while building SolidGuard:
+
+-   **Architecture and boilerplate.** We used GAI to draft initial FastAPI skeletons, React component structures, and Tailwind-based styling. This allowed us to focus more quickly on the project-specific logic instead of spending time on routine setup.
+-   **Debugging and refactoring.** When we encountered issues such as path resolution for `knowledge_store.jsonl`, CORS errors, or TypeScript type mismatches between hooks and components, we used GAI to reason through stack traces and propose refactorings. Importantly, we learned to treat these suggestions critically, verifying them against documentation and reading the generated code carefully.
+-   **Prompt iteration.** We iterated on the RAW and RAG prompts by pasting sample contracts and having GAI simulate the model’s perspective. This helped us discover missing instructions, such as always returning an `attacks` array even when empty, or clarifying that line numbers should reference the numbered contract we provide.
+
+Through this process, we developed several skills aligned with the course learning objectives:
+
+**Prompt engineering, LLM systems design, Critical use of GAI**
+
+# Additions
+
+Need to add details about how we made the knowledge store, what the embeddings are that we list and how we created the embeddings.
+
+## **1. Goal Understanding**
+
+* Users understand the core idea: an **AI-powered Solidity code auditor** that detects vulnerabilities and explains issues.
+* They find the concept valuable, especially for **students, developers, and engineers without access to full audits**.
+
+---
+
+## **2. Data Understanding**
+
+* Users could not clearly identify **what the knowledge base contains**.
+* The RAG system is assumed, but the report should better explain:
+
+  * What data is included
+  * How embeddings are built
+  * How retrieval works
+  * What the knowledge store is composed of (SWC Registry, OWASP, OpenZeppelin, etc.)
+
+---
+
+## **3. Approach Feedback**
+
+* Overall, the approach is **well-documented and technically strong**.
+* Tiered methodology (raw → RAG → fine-tuning) is appreciated.
+* Tools and pipelines are clear, but:
+
+  * Some users were unsure about **embedding type**, **knowledge store contents**, and **how RAW vs RAG differ**.
+* The app URL was hard to find — should be placed in the **main README**.
+
+---
+
+## **4. User Interface Feedback**
+
+**Positive**
+
+* UI is visually appealing, polished, and modern.
+* Severity colors and line references are very helpful.
+* LLM explanations are clear and useful.
+
+**Areas to Improve**
+
+* Not very intuitive for **first-time users** or people unfamiliar with Solidity.
+* Buttons need more explanation (what RAW vs RAG actually do).
+* Users want clearer guidance or onboarding instructions.
+* Website navigation and instructions should be clarified.
+
+---
+
+## **5. LLM Output**
+
+* Clear, actionable, and easy to interpret.
+* Severity coloring and line references greatly enhance usability.
+* RAW and RAG currently feel **similar**, causing confusion.
+
+---
+
+## **6. Bugs / Performance Issues**
+
+* RAW and RAG sometimes produce the **same result**, making it unclear if RAG works.
+* The app takes a while to load/start — startup time could be improved.
+* Hard to test due to setup friction.
+
+---
+
+## **7. Feedback / Suggestions**
+
+* Clarify how to **use the website** and what the different modes do.
+* Add clearer user instructions and possibly onboarding or tooltips.
+* Improve documentation around:
+
+  * Knowledge store
+  * Embeddings
+  * Differences between modes
+* Integrate into an IDE for real-world use cases (VS Code extension idea).
+* Streamline installation / access.
+
+---
+
+## **8. Aspects Users Liked**
+
+* UI theme and overall design.
+* Severity colors + structured LLM output.
+* Strong technical depth and breadth.
+* Impressive amount of progress for a short timeline.
+
+---
+
+## **9. Reflections (What users learned from your project)**
+
+* They want to make *their own* UI more polished.
+* Your project demonstrates the importance of:
+
+  * Clear documentation
+  * Descriptive explanations
+  * Making complex systems understandable
+
+---
+
+## **10. General Comments**
+
+* “Super cool project.”
+* “Amazing design.”
+* “Hard to test, so the professor may also get confused.”

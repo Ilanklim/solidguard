@@ -1,0 +1,153 @@
+version: "3"
+
+tasks:
+
+  setup:
+    desc: "Full environment setup: system tools + backend + frontend dependencies"
+    cmds:
+      - echo "🔍 Checking system requirements..."
+
+      # ---------------------------
+      # Install uv
+      # ---------------------------
+      - |
+        if ! command -v uv >/dev/null 2>&1; then
+          echo "📦 Installing uv (Python env manager)..."
+          if [[ "$OSTYPE" == "darwin"* ]]; then
+            brew install uv
+          else
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+          fi
+        else
+          echo "✅ uv already installed."
+        fi
+
+      # ---------------------------
+      # Install Taskfile itself
+      # ---------------------------
+      - |
+        if ! command -v task >/dev/null 2>&1; then
+          echo "📦 Installing Taskfile..."
+          if [[ "$OSTYPE" == "darwin"* ]]; then
+            brew install go-task/tap/go-task
+          else
+            sh -fsSL https://taskfile.dev/install.sh | sh
+          fi
+        else
+          echo "✅ Taskfile already installed."
+        fi
+
+      # ---------------------------
+      # Install Python / pip
+      # ---------------------------
+      - |
+        if ! command -v python3 >/dev/null 2>&1; then
+          echo "📦 Installing Python + pip..."
+          if [[ "$OSTYPE" == "darwin"* ]]; then
+            brew install python
+          else
+            sudo apt-get install python3 python3-pip -y
+          fi
+        else
+          echo "✅ Python already installed."
+        fi
+
+      # ---------------------------
+      # Install Node.js (18+)
+      # ---------------------------
+      - |
+        if ! command -v node >/dev/null 2>&1; then
+          echo "📦 Installing Node.js..."
+          if [[ "$OSTYPE" == "darwin"* ]]; then
+            brew install node
+          else
+            sudo apt-get install nodejs npm -y
+          fi
+        else
+          echo "✅ Node.js already installed."
+        fi
+
+      # ---------------------------
+      # Install Bun
+      # ---------------------------
+      - |
+        if ! command -v bun >/dev/null 2>&1; then
+          echo "📦 Installing Bun..."
+          curl -fsSL https://bun.sh/install | bash
+        else
+          echo "✅ Bun already installed."
+        fi
+
+
+  install:
+    desc: "Install backend + frontend dependencies"
+    cmds:
+      - echo "📦 Installing backend Python dependencies..."
+      - uv sync
+
+      - echo "📦 Installing frontend dependencies..."
+      - cd frontend && bun install
+
+      - echo "✅ Installation complete."
+
+
+  backend:
+    desc: "Start FastAPI backend"
+    dir: backend
+    cmds:
+      - echo "🚀 Starting backend at http://localhost:8000"
+      - uvicorn app:app --reload --host 0.0.0.0 --port 8000
+
+  frontend:
+    desc: "Start React/Vite frontend"
+    dir: frontend
+    cmds:
+      - echo "🚀 Starting frontend at http://localhost:8080"
+      - bun dev
+
+  open-browser:
+    desc: "Open browser to frontend automatically"
+    cmds:
+      - |
+        echo "🌐 Opening browser at http://localhost:8080 ..."
+        sleep 2
+        if command -v open >/dev/null 2>&1; then
+          open http://localhost:8080
+        elif command -v xdg-open >/dev/null 2>&1; then
+          xdg-open http://localhost:8080
+        else
+          echo "⚠️ Could not auto-open browser. Please navigate manually."
+        fi
+
+  app:
+    desc: "Run backend + frontend + auto-open browser"
+    cmds:
+      - task backend &
+      - task frontend &
+      - task open-browser
+      - wait
+  
+  end:
+    desc: "Stop backend & frontend processes"
+    cmds:
+      - echo "🛑 Stopping backend & frontend..."
+      - |
+        echo "🔪 Killing uvicorn..."
+        pkill -f "uvicorn" || true
+
+      - |
+        echo "🔪 Killing Python backend processes..."
+        pkill -f "python" || true
+
+      - |
+        echo "🔪 Killing bun/vite frontend..."
+        pkill -f "bun" || true
+        pkill -f "vite" || true
+
+      - |
+        echo "🧹 Freeing ports 8000 and 8080..."
+        lsof -ti :8000 | xargs kill -9 2>/dev/null || true
+        lsof -ti :8080 | xargs kill -9 2>/dev/null || true
+
+      - echo "✅ All services stopped."
+
