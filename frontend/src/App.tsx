@@ -28,19 +28,12 @@ export default function App() {
 
   const [mode, setMode] = useState<"raw" | "rag">("raw");
   const [model, setModel] = useState("gpt-4.1-mini");
-  const [realtimeEnabled, setRealtimeEnabled] = useState(false);
 
   // ============================================================================
   //                                   API HOOKS
   // ============================================================================
   const { analyze, isLoading, result, clearResult } = useAnalyzeContract();
   const { generate, isGenerating, generated } = useGenerateContract();
-
-  const {
-    isAnalyzing: isRealtimeAnalyzing,
-    result: realtimeResult,
-    attacks: realtimeAttacks,
-  } = useRealtimeAnalysis(code, mode, model, realtimeEnabled, 300);
 
   // ============================================================================
   //              UPDATE EDITOR WHEN MALICIOUS CONTRACT IS GENERATED
@@ -55,11 +48,9 @@ export default function App() {
   // ============================================================================
   //                              DISPLAYED RESULTS
   // ============================================================================
-  const displayResult =
-    realtimeEnabled && realtimeResult ? realtimeResult : result;
+  const displayResult = result;
 
-  const displayAttacks: any[] =
-    (realtimeEnabled ? realtimeAttacks : displayResult?.attacks) || [];
+  const displayAttacks: any[] = displayResult?.attacks || [];
 
   // ============================================================================
   //                                      UI
@@ -76,14 +67,10 @@ export default function App() {
         setModel={setModel}
         mode={mode}
         setMode={setMode}
-        realtimeEnabled={realtimeEnabled}
-        setRealtimeEnabled={setRealtimeEnabled}
-        isRealtimeAnalyzing={isRealtimeAnalyzing}
         isGenerating={isGenerating}
         generate={(attack) => generate(attack, model)}
         analyze={() => analyze(code, mode, model)}
         isLoading={isLoading}
-        vulnerabilityList={displayAttacks}
       />
 
       {/* ========================================================================= */}
@@ -107,7 +94,7 @@ export default function App() {
         {/* Results Panel */}
         <div className="w-1/3 p-4 overflow-auto">
           <ResultsPanel
-            isLoading={!realtimeEnabled && isLoading}
+            isLoading={isLoading}
             result={displayResult}
           />
         </div>

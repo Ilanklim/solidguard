@@ -1,6 +1,5 @@
 import { openOnboardingModal } from "@/components/OnboardingModal";
 import { ModeToggle } from "@/components/ModeToggle";
-import { RealtimeToggle } from "@/components/RealtimeToggle";
 import { GeneratePanel } from "@/components/GeneratePanel";
 import { useEffect } from "react";
 
@@ -9,42 +8,11 @@ export function TopToolbar({
   setModel,
   mode,
   setMode,
-  realtimeEnabled,
-  setRealtimeEnabled,
-  isRealtimeAnalyzing,
   isGenerating,
   generate,
   analyze,
   isLoading,
-  vulnerabilityList,
 }) {
-  // Watch for changes in vulnerability list, model, or mode
-  useEffect(() => {
-    if (!realtimeEnabled) return;
-
-    // Trigger contract generation when vulnerability list changes
-    if (vulnerabilityList) {
-      generate();
-    }
-  }, [vulnerabilityList, realtimeEnabled, generate]);
-
-  useEffect(() => {
-    if (!realtimeEnabled) return;
-
-    // Trigger analysis when model changes
-    if (model) {
-      analyze();
-    }
-  }, [model, realtimeEnabled, analyze]);
-
-  useEffect(() => {
-    if (!realtimeEnabled) return;
-
-    // Trigger analysis when mode changes
-    if (mode) {
-      analyze();
-    }
-  }, [mode, realtimeEnabled, analyze]);
 
   return (
     <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-card">
@@ -83,12 +51,6 @@ export function TopToolbar({
         {/* Divider */}
         <div className="w-px h-6 bg-border/60" />
 
-        {/* Realtime toggle */}
-        <RealtimeToggle
-          enabled={realtimeEnabled}
-          onChange={setRealtimeEnabled}
-          isAnalyzing={isRealtimeAnalyzing}
-        />
       </div>
 
       {/* ------------------------------------------------ */}
