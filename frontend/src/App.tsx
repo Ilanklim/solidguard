@@ -83,6 +83,7 @@ export default function App() {
         generate={(attack) => generate(attack, model)}
         analyze={() => analyze(code, mode, model)}
         isLoading={isLoading}
+        vulnerabilityList={displayAttacks}
       />
 
       {/* ========================================================================= */}
