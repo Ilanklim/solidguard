@@ -1,0 +1,94 @@
+You are an expert Solidity engineer and blockchain security researcher.
+
+Generate TWO Solidity smart contracts and one JSON metadata object.
+
+PRIMARY REQUIREMENTS
+
+Generate:
+
+1. A MALICIOUS contract:
+   * Must begin with: // SPDX-License-Identifier: UNLICENSED
+   * Contains 1–3 real vulnerabilities (90% = 1 vuln, 10% = 2–3 vulns)
+   * Vulnerabilities must be Slither-detectable
+   * Solidity ^0.8.20
+   * Under 100 lines
+   * No imports, no libraries, no OpenZeppelin
+   * Mark vulnerable lines with "// vulnerable"
+
+2. A SAFE contract:
+   * Must begin with: // SPDX-License-Identifier: UNLICENSED
+   * Mirrors naming, structure, functions
+   * All vulnerabilities fixed
+   * Under 100 lines
+   * Compiles under ^0.8.20
+
+SUPPORTED ATTACK TYPES (use only these):
+- access_control
+- arithmetic
+- denial_of_service
+- front_running
+- initialization
+- reentrancy
+- signature_verification
+- unchecked_return_value
+- unencrypted_private_data
+- unprotected_self_destruct
+
+VARIABLE INPUTS (inserted by script)
+
+ATTACK TYPE: {attack_type}
+CONTRACT ID: {contract_id}
+
+JSON OUTPUT FORMAT (CRITICAL)
+
+You MUST output a JSON object with EXACTLY this structure:
+
+{{
+  "id": "{contract_id}",
+  "solidity": "^0.8.20",
+  "attacks": [
+  {{
+    "type": "<attack_type>",
+    "severity": "<low|medium|high>",
+    "lines": [<line_numbers>],
+    "description": "<1 sentence description>",
+    "refs": [
+    "[https://swcregistry.io/docs/](https://swcregistry.io/docs/)<SWC-ID>"
+    ]
+  }}
+  ...if multiple vulnerabilities, include more objects...
+  ],
+  "paths": {{
+    "malicious": "data/synthetic/malicious/{contract_id}.sol",
+    "safe": "data/synthetic/safe/{contract_id}_safe.sol",
+    "analysis": "data/synthetic/slither/{contract_id}.json"
+  }}
+}}
+
+IMPORTANT RULES:
+
+* JSON MUST NOT contain Solidity code.
+* JSON MUST contain ONLY the fields shown above.
+* JSON MUST appear FIRST in the response.
+* If the malicious contract contains multiple vulnerabilities, add one object per vulnerability to the "attacks" array.
+* The "attacks" array must never be empty.
+
+CONTRACT OUTPUT (AFTER JSON ONLY)
+
+After the JSON, output exactly:
+
+// MALICIOUS CONTRACT
+<MALICIOUS_SOLIDITY_CODE>
+
+// SAFE CONTRACT
+<SAFE_SOLIDITY_CODE>
+
+STRICT FORMAT RULES:
+
+* No markdown formatting.
+* No ``` code fences.
+* No explanations.
+* No comments except the required "// vulnerable" tags.
+* Both contracts MUST compile under Solidity ^0.8.20.
+
+BEGIN NOW
