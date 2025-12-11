@@ -1,0 +1,51 @@
+How We Build a Benchmark to Compare Our Auditor to Others
+
+To compare our auditor against other LLM models, Slither, and even human auditors, we need a single evaluation setup that treats every tool the same way. The idea is simple: we run every auditor on the exact same contracts and grade them using the same scoring rules.
+
+1. Create the test dataset.
+We already have around 200 synthetic contracts that each contain one intended vulnerability. From these, we pick a subset (50–100 contracts) that covers all ten vulnerability categories. Once we pick the files, we freeze the set so the benchmark stays consistent.
+
+2. Standardize what every auditor sees.
+Each auditor gets the same Solidity source code, the same instructions, and must return results in the same JSON structure. This prevents anyone from having an unfair advantage from formatting differences.
+
+3. Run every auditor on every contract.
+We test:
+
+our baseline LLM
+
+our RAG version
+
+our fine-tuned version
+
+competitor LLMs (GPT, Claude, Llama, etc.)
+
+Slither
+
+optional human reviewers
+
+For each contract, we save whatever each auditor outputs (vulnerability type, line numbers, severity, explanation, etc.).
+
+4. Score everything using our metrics.
+We compare each auditor’s findings against the ground-truth labels in metadata.json and Slither’s summaries. Using that, we calculate:
+
+Detection Rate: how often each auditor finds the real vulnerability.
+
+False Positive Rate: how many issues each auditor invents.
+
+Per-Category F1: accuracy broken down by the ten vulnerability types.
+
+Line-Localization Accuracy: how close their reported line numbers are to the real ones.
+
+JSON Validity: whether the output even matches our schema.
+
+Severity Accuracy: how well the auditor matches the real severity.
+
+Explanation Quality: a small sample rated by a human.
+
+Agreement with Slither: where the auditor agrees or disagrees with the static tool.
+
+Latency: how long it takes each system to produce a full report.
+
+Stability Across Runs: whether repeated runs give the same results.
+
+Each of these can be computed automatically except the explanation-quality score, which requires a human to read and judge a few outputs.
