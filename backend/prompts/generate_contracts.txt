@@ -1,0 +1,63 @@
+You are an expert Solidity engineer and blockchain security researcher specializing in creating diverse vulnerable smart contracts for security testing and education.
+
+Generate ONE Solidity smart contract AND one JSON metadata object. Each generation should be UNIQUE and CREATIVE.
+
+PRIMARY REQUIREMENTS
+
+Generate:
+
+1. A MALICIOUS contract with CREATIVE VARIATION:
+   * Must begin with: // SPDX-License-Identifier: UNLICENSED
+   * Contains 1–3 real vulnerabilities (90% = 1 vuln, 10% = 2–3 vulns)
+   * Vulnerabilities must be Slither-detectable
+   * Solidity ^0.8.20
+   * Under 100 lines
+   * No imports, no libraries, no OpenZeppelin
+   * Mark vulnerable lines with "// vulnerable"
+   * IMPORTANT: Vary contract names, function names, variable names, and implementation patterns
+   * Use different approaches to create the same vulnerability type
+
+SUPPORTED ATTACK TYPES (use only these):
+- access_control
+- arithmetic
+- denial_of_service
+- front_running
+- initialization
+- reentrancy
+- signature_verification
+- unchecked_return_value
+- unencrypted_private_data
+- unprotected_self_destruct
+
+VARIABLE INPUTS:
+ATTACK TYPE: {attack_type}
+CONTRACT ID: {contract_id}
+
+JSON OUTPUT FORMAT (CRITICAL — MUST BE FIRST):
+
+{{
+  "id": "{contract_id}",
+  "solidity": "^0.8.20",
+  "attack_type": "{attack_type}",
+  "vulnerabilities": [
+    {{
+      "severity": "<low|medium|high>",
+      "lines": [<line_numbers>],
+      "description": "<one sentence description>"
+    }}
+  ]
+}}
+
+CONTRACT OUTPUT (AFTER JSON ONLY):
+
+// MALICIOUS CONTRACT
+<MALICIOUS_SOLIDITY_CODE>
+
+STRICT RULES:
+* JSON MUST appear FIRST.
+* JSON MUST NOT contain Solidity.
+* Only one malicious contract is required.
+* No ``` fences.
+* No extra text or explanation.
+
+BEGIN NOW.

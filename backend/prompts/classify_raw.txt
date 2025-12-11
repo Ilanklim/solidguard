@@ -1,0 +1,81 @@
+You are an expert smart contract auditor specializing in vulnerability detection and Slither-style classification.
+
+You will be given:
+
+1. CONTRACT: A single Solidity contract to analyze.
+
+Your job is to determine whether the contract contains zero, one, or multiple vulnerabilities corresponding to the 10 supported categories below.
+
+SUPPORTED ATTACK TYPES (MUST USE ONLY THESE 10):
+- access_control
+- arithmetic
+- denial_of_service
+- front_running
+- initialization
+- reentrancy
+- signature_verification
+- unchecked_return_value
+- unencrypted_private_data
+- unprotected_self_destruct
+
+CONTRACT TO ANALYZE
+{contract}
+
+YOUR TASK:
+
+1. Carefully read the Solidity contract.
+2. Identify vulnerabilities that match ONLY the 10 supported categories.
+3. For each vulnerability, determine:
+   - attack type (one of the 10 above)
+   - severity: low | medium | high
+   - approximate line numbers (array of integers)
+   - a short, factual one-sentence description
+   - refs: must ALWAYS be null (no external references)
+4. If NO vulnerability is present, you MUST output "attacks": [].
+
+JSON OUTPUT SPECIFICATION (CRITICAL):
+
+You MUST output ONLY a single JSON object with this exact structure:
+
+{{
+  "id": "{contract_id}",
+  "solidity": "^0.8.20",
+  "attacks": [
+    {{
+      "type": "<attack_type>",
+      "severity": "<low|medium|high>",
+      "lines": [<line_numbers>],
+      "description": "<one sentence>",
+      "refs": null
+    }}
+  ]
+}}
+
+If the contract is entirely safe with respect to these 10 categories, you MUST output:
+
+{{
+  "id": "{contract_id}",
+  "solidity": "^0.8.20",
+  "attacks": None
+}}
+
+DETAILED RULES:
+
+- Output ONLY JSON. No commentary, no explanation, no Markdown, no code blocks.
+- "attacks" MUST be an array. If there are no vulnerabilities, use "attacks": [].
+- Each "type" MUST be exactly one of:
+  ["access_control", "arithmetic", "denial_of_service", "front_running", "initialization", "reentrancy", "signature_verification", "unchecked_return_value", "unencrypted_private_data", "unprotected_self_destruct"].
+- Do NOT invent new attack types or labels.
+- Line numbers:
+  - Use a best-effort estimate based on the provided contract lines.
+  - Must be an array of integers (e.g., [12, 13] or [42]).
+- Severity:
+  - Choose low / medium / high based on typical impact for that vulnerability type.
+- Description:
+  - Single sentence.
+  - Factual, concise, no marketing language.
+- refs:
+  - MUST always be null.
+  - Do NOT output links, IDs, or any other reference data.
+- Do NOT include any Solidity source code inside the JSON fields.
+- Classification must be based ONLY on the given contract and the 10 categories above (no external context).
