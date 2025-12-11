@@ -52,7 +52,7 @@ RAG_PROMPT = (RELATIVE_ROOT / "prompts" / "classify_rag.txt").read_text(encoding
 
 # For RAG retrieval
 from retrieve_embeddings import KnowledgeStore  # noqa: E402
-KS = KnowledgeStore(path=ROOT / "knowledge_store.jsonl")
+KS = KnowledgeStore(path=RELATIVE_ROOT / "knowledge_store.jsonl")
 KS.load()
 
 
