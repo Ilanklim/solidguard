@@ -1,0 +1,244 @@
+version: "3"
+
+# ------------------------------------------------------
+# Global directory variables
+# ------------------------------------------------------
+vars:
+  SYN: data/synthetic
+  LOG: data/synthetic/generation.log
+
+# ------------------------------------------------------
+# Default Task
+# ------------------------------------------------------
+tasks:
+  default:
+    desc: |
+      List all tasks.
+      Example:
+        task
+    cmds:
+      - task --list
+    silent: true
+
+# ======================================================
+# 🔹 CONTRACT GENERATION (WITH MODEL SELECTION)
+# ======================================================
+  generate:
+    desc: |
+      Generate synthetic contracts.
+
+      Example:
+        task generate -- 5 gpt-5.1
+    cmds:
+      - |
+        COUNT="$(echo "{{.TASK_ARGS}}" | awk '{print $1}')"
+        MODEL="$(echo "{{.TASK_ARGS}}" | awk '{print $2}')"
+
+        if [ -z "$COUNT" ]; then COUNT=1; fi
+        if [ -z "$MODEL" ]; then MODEL="gpt-4.1"; fi
+
+        echo "Generating $COUNT contract(s) with model: $MODEL"
+
+        uv run python scripts/generation/generate_contracts.py \
+          --num_contracts "$COUNT" \
+          --model "$MODEL"
+
+  generate:log:
+    desc: |
+      View the contract-generation log.
+    cmds:
+      - echo "--- generation.log ---"
+      - cat {{.LOG}}
+
+# ======================================================
+# 🔹 SLITHER ANALYSIS
+# ======================================================
+  slither:
+    desc: |
+      Run Slither on *all* malicious contracts.
+    cmds:
+      - echo "Running Slither across dataset..."
+      - uv run python scripts/comparitors/run_slither.py
+
+  slither:file:
+    desc: |
+      Run Slither on a single Solidity file.
+    cmds:
+      - |
+        FILE="{{.TASK_ARGS}}"
+        if [ -z "$FILE" ]; then
+          echo "Usage: task slither:file -- <path/to/contract.sol>"
+          exit 1
+        fi
+        echo "Running Slither on $FILE"
+        uv run slither "$FILE"
+
+# ======================================================
+# 🔹 SLITHER NORMALIZATION
+# ======================================================
+  slither:extract:
+    desc: |
+      Normalize ONE slither_raw.json report.
+    cmds:
+      - |
+        FILE="{{.TASK_ARGS}}"
+        if [ -z "$FILE" ]; then
+          echo "Usage: task slither:extract -- <path/to/slither_raw.json>"
+          exit 1
+        fi
+        uv run python scripts/comparitors/summarize_slither.py "$FILE"
+
+  slither:extract:all:
+    desc: |
+      Normalize ALL slither_raw.json reports.
+    cmds:
+      - echo "Normalizing ALL slither reports..."
+      - uv run python scripts/comparitors/summarize_slither.py --all
+
+# ======================================================
+# 🔹 CLASSIFICATION (NEW)
+# ======================================================
+
+  classify:raw:
+    desc: |
+      Run classify_raw.py on a *single* contract folder.
+
+      Example:
+        task classify:raw -- reentrancy/reentrancy_002
+    cmds:
+      - |
+        TARGET="{{.TASK_ARGS}}"
+        if [ -z "$TARGET" ]; then
+          echo "Usage: task classify:raw -- <attack_type/contract_folder>"
+          exit 1
+        fi
+        
+        CONTRACT_PATH="data/synthetic/$TARGET"
+        echo "Running RAW classification on $CONTRACT_PATH"
+        
+        uv run python scripts/classification/classify_raw.py "$CONTRACT_PATH"
+
+  classify:rag:
+    desc: |
+      Run classify_rag.py on a *single* contract folder.
+
+      Example:
+        task classify:rag -- reentrancy/reentrancy_002
+    cmds:
+      - |
+        TARGET="{{.TASK_ARGS}}"
+        if [ -z "$TARGET" ]; then
+          echo "Usage: task classify:rag -- <attack_type/contract_folder>"
+          exit 1
+        fi
+        
+        CONTRACT_PATH="data/synthetic/$TARGET"
+        echo "Running RAG classification on $CONTRACT_PATH"
+        
+        uv run python scripts/classification/classify_rag.py "$CONTRACT_PATH"
+
+  classify:both:
+    desc: |
+      Run BOTH raw + RAG classification on a single folder.
+
+      Example:
+        task classify:all -- reentrancy/reentrancy_002
+    cmds:
+      - |
+        TARGET="{{.TASK_ARGS}}"
+        if [ -z "$TARGET" ]; then
+          echo "Usage: task classify:all -- <attack_type/contract_folder>"
+          exit 1
+        fi
+        
+        CONTRACT_PATH="data/synthetic/$TARGET"
+        echo "Running RAW + RAG classification on $CONTRACT_PATH"
+        
+        uv run python scripts/classification/classify_raw.py "$CONTRACT_PATH"
+        uv run python scripts/classification/classify_rag.py "$CONTRACT_PATH"
+    
+  classify:all:
+    desc: |
+      Run the global classify_all.py script (RAW + RAG for everything).
+
+      Example:
+        task classify:all
+    cmds:
+      - |
+        echo "Running complete RAW + RAG classification pipeline..."
+        uv run python scripts/classification/classify_all.py
+
+
+# ======================================================
+# 🔹 FULL PIPELINE
+# ======================================================
+  pipeline:
+    desc: |
+      Run full pipeline: generate → slither → summarize
+    cmds:
+      - |
+        ARGS="{{.CLI_ARGS}}"
+        COUNT=$(echo "$ARGS" | awk '{print $1}')
+        MODEL=$(echo "$ARGS" | awk '{print $2}')
+
+        if [ -z "$COUNT" ]; then COUNT=10; fi
+        if [ -z "$MODEL" ]; then MODEL="gpt-4.1"; fi
+
+        echo "Running full pipeline on $COUNT contract(s) with model $MODEL"
+
+        uv run python scripts/pipeline.py \
+          --all \
+          --num "$COUNT" \
+          --model "$MODEL"
+
+# ======================================================
+# 🔹 CLEANUP
+# ======================================================
+  clean:synthetic:
+    desc: |
+      Delete all synthetic dataset content.
+    cmds:
+      - echo "Cleaning data/synthetic..."
+      - rm -rf {{.SYN}}/*
+      - mkdir -p {{.SYN}}
+      - echo "Synthetic dataset wiped."
+
+  clean:build:
+    desc: |
+      Clean build artifacts.
+    cmds:
+      - rm -rf build
+      - mkdir -p build
+
+# ======================================================
+# 🔹 LISTING TASKS
+# ======================================================
+  ls:
+    desc: |
+      List attack categories inside data/synthetic/.
+    cmds:
+      - echo "📁 Attack categories:"
+      - ls -1 {{.SYN}} || true
+
+  ls:contracts:
+    desc: |
+      List contract folders for one attack type.
+    cmds:
+      - |
+        ATTACK="{{.TASK_ARGS}}"
+        if [ -z "$ATTACK" ]; then
+          echo "Usage: task ls:contracts -- <attack_type>"
+          exit 1
+        fi
+        echo "📁 Contract folders under {{.SYN}}/$ATTACK:"
+        ls -1 {{.SYN}}/$ATTACK || true
+
+  ls:slither:
+    desc: |
+      List every slither_raw.json and slither_normalized.json.
+    cmds:
+      - echo "📁 slither_raw.json:"
+      - find {{.SYN}} -name "slither_raw.json"
+      - echo ""
+      - echo "📁 slither_normalized.json:"
+      - find {{.SYN}} -name "slither_normalized.json"
