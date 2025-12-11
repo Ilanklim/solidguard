@@ -1,0 +1,63 @@
+Vaulnerability Name: access_control
+Title: Access Control Vulnerabilities
+
+Relationships:
+- SWC-105: Unprotected Function
+- CWE-284: Improper Access Control
+- Related Concept: Role-Based Permissions
+
+Description:
+Access control vulnerabilities arise when smart contracts lack proper mechanisms to restrict unauthorized access to critical functions. This leaves the contract open for malicious actors to execute restricted functions, potentially leading to unauthorized fund transfers, changes in contract logic, or other detrimental actions.
+
+The Visor Finance exploit in 2022 shows the potential impact of access control vulnerabilities. According to the post-mortem, the attacker contract implemented the IVisor delegateTransferERC20 interface and called the staking contract’s withdraw function with the desired amount. The protocol’s dependence on an arbitrary IVisor delegateTransferERC20 implementation by the caller enabled this attack.
+
+Remediation:
+It is recommended to guard the critical functions of your protocol with access controls. Ensure you properly label roles and role-based permissions and use the onlyOwner modifier. Get detailed testing and code reviews to ensure that all critical functions are properly secured.
+
+References:
+- Visor Finance Exploit (2022)
+- SWC-105: Unprotected Function
+- CWE-284: Improper Access Control
+
+Vulnerable Example (based only on your paragraph):
+pragma solidity ^0.8.0;
+
+interface IVisor {
+    function delegateTransferERC20(address token, address to, uint256 amount) external returns (bool);
+}
+
+contract StakingContract {
+    address public stakingToken;
+    IVisor public visor;
+
+    constructor(address token) {
+        stakingToken = token;
+    }
+
+    // Vulnerability described in your paragraph: depends on arbitrary implementations
+    function withdraw(address to, uint256 amount) public {
+        visor.delegateTransferERC20(stakingToken, to, amount);
+    }
+}
+
+Fixed Example (minimal change based only on your paragraph):
+pragma solidity ^0.8.0;
+
+contract SafeStakingContract {
+    address public stakingToken;
+    address public owner;
+
+    constructor(address token) {
+        stakingToken = token;
+        owner = msg.sender;
+    }
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Not authorized");
+        _;
+    }
+
+    function withdraw(address to, uint256 amount) public onlyOwner {
+        // Access control added as recommended in your paragraph
+    }
+}

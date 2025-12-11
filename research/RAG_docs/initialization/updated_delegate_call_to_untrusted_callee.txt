@@ -1,0 +1,152 @@
+Vulnerability Name: initialization
+Title: Delegatecall to Untrusted Callee (AttackType: initialization)
+SWC: SWC-112
+CWE: CWE-829 (Inclusion of Functionality from Untrusted Control Sphere), CWE-827 (Improper Control of a Resource Through Its Lifetime)
+
+Description
+-----------
+delegatecall is a low-level function in Solidity that executes code from another contract in the context of the calling contract. This means:
+- Storage is read/written on the caller
+- msg.sender and msg.value remain unchanged
+- address(this) and balance refer to the caller
+
+If the target address of delegatecall is user-controlled or untrusted, the callee can arbitrarily modify the caller's storage — including ownership, balances, or critical state variables — and even self-destruct the caller or drain its funds.
+
+This was the root cause of the infamous Parity Wallet Hack (2017) where a user became owner via delegatecall and called selfdestruct().
+
+Key Patterns
+------------
+- Using delegatecall with user-provided or dynamic addresses
+- Proxy contracts that forward calls via delegatecall without strict access control
+- Upgradeable contract systems without whitelisting or immutability
+- Libraries called via delegatecall from untrusted sources
+- delegatecall inside loops or public functions
+
+Impact
+------
+- Complete loss of contract ownership
+- Arbitrary storage corruption
+- Theft of all Ether/tokens
+- Contract self-destruction
+- Permanent loss of funds
+
+Remediation
+-----------
+- Never use delegatecall to user-supplied addresses
+- If upgradeability is needed, use a secure proxy pattern with:
+  - Immutable or owner-controlled implementation address
+  - Whitelist + onlyOwner setter
+  - Transparent or UUPS pattern with proper validation
+- Prefer CALL over DELEGATECALL when storage isolation is desired
+- Use OpenZeppelin’s audited Proxy contracts (TransparentProxy, UUPSProxy)
+
+References
+----------
+- SWC Registry: Delegatecall to Untrusted Callee
+  https://swc-registry.io/docs/SWC-112
+- Parity Wallet Hack Postmortem
+  https://www.parity.io/blog/security-alert-2/
+- OpenZeppelin Transparent Proxy Pattern
+  https://docs.openzeppelin.com/contracts/4.x/api/proxy#TransparentProxy
+- Solidity Docs: delegatecall
+  https://docs.soliditylang.org/en/latest/types.html#address
+
+Samples
+=======
+
+Example: proxy.sol (vulnerable — initialization)
+Type: vulnerable
+Notes:
+Any user can call forward() with malicious calldata targeting a contract that writes to storage slot 0 (owner) → becomes owner and drains funds.
+```solidity
+pragma solidity ^0.4.24;
+
+contract Proxy {
+    address owner;
+
+    constructor() public {
+        owner = msg.sender;
+    }
+
+    function forward(address callee, bytes _data) public {
+        require(callee.delegatecall(_data));  // Extremely dangerous — callee runs in Proxy's storage context
+    }
+}
+Example: proxy_fixed.sol (safe — initialization)
+Type: safe
+Notes:
+Implementation address is controlled only by owner. No user input allowed in delegatecall target.
+soliditypragma solidity ^0.4.24;
+
+contract Proxy {
+    address callee;
+    address owner;
+
+    modifier onlyOwner {
+        require(msg.sender == owner);
+        _;
+    }
+
+    constructor() public {
+        owner = msg.sender;
+    }
+
+    function setCallee(address newCallee) public onlyOwner {
+        callee = newCallee;
+    }
+
+    function forward(bytes _data) public {
+        require(callee.delegatecall(_data));
+    }
+}
+Example: uups_proxy_safe.sol (safe — initialization)
+Type: safe
+Notes:
+Modern UUPS pattern (ERC-1822) — upgrade function protected and implementation cannot be malicious.
+soliditypragma solidity ^0.8.20;
+
+contract UUPSProxy {
+    address public implementation;
+    address public admin;
+
+    constructor(address _implementation) {
+        admin = msg.sender;
+        implementation = _implementation;
+    }
+
+    fallback() external payable {
+        address impl = implementation;
+        require(impl != address(0));
+        assembly {
+            calldatacopy(0, 0, calldatasize())
+            let result := delegatecall(gas(), impl, 0, calldatasize(), 0, 0)
+            returndatacopy(0, 0, returndatasize())
+            switch result
+            case 0 { revert(0, returndatasize()) }
+            default { return(0, returndatasize()) }
+        }
+    }
+
+    function upgradeTo(address newImplementation) external {
+        require(msg.sender == admin);
+        implementation = newImplementation;
+    }
+}
+Example: proxy_pattern_false_positive.sol (safe — initialization)
+Type: safe
+Notes:
+Interesting edge case: delegatecall is used but the require() inverts the success check — malicious code either reverts or causes the proxy function to revert → owner cannot be overwritten.
+soliditypragma solidity ^0.4.24;
+
+contract ProxySafeEdgeCase {
+    address owner = msg.sender;
+
+    function proxyCall(address _to, bytes _data) external {
+        require(!_to.delegatecall(_data));  // Intentional: reverts unless delegatecall fails
+    }
+
+    function withdraw() external {
+        require(msg.sender == owner);
+        msg.sender.transfer(address(this).balance);
+    }
+}

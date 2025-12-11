@@ -1,0 +1,121 @@
+Vulnerability Name: unchecked_return_value
+Title: Unchecked Call Return Value (AttackType: unchecked_return_value)
+SWC: SWC-104
+CWE: CWE-252 (Unchecked Return Value), CWE-703 (Improper Check or Handling of Exceptional Conditions)
+
+Description
+-----------
+Solidity's low-level `.call()`, `.delegatecall()`, and `.staticcall()` return a boolean (success) and bytes data. If the boolean return value is not checked, the contract silently continues execution even when the external call reverts or runs out of gas. This can lead to inconsistent state: funds may be transferred but state updates skipped, balances not updated, or critical operations assumed successful when they failed.
+
+This was a contributing factor in several historical exploits (e.g., The DAO, Parity Multisig second hack).
+
+Key Patterns
+------------
+- Using .call(), .delegatecall(), or .staticcall() without checking the bool return
+- Using require(address.call()) — safe
+- Using address.call() without assignment or check — dangerous
+- Assuming external calls always succeed
+- Silent failure in token transfers, withdrawals, or proxy calls
+
+Impact
+------
+- Funds become stuck (sent but state not updated)
+- Inconsistent accounting (e.g. balance deducted but transfer failed)
+- Silent DoS or logic bypass
+- Enables griefing attacks (malicious contract reverts on purpose)
+
+Remediation
+-----------
+- Always check the boolean return value of low-level calls
+- Prefer high-level .transfer() or .call{value: }() with .value() for Ether sends
+- For ERC20/ERC721: use OpenZeppelin SafeERC20 which wraps calls with checks
+- Never ignore the success boolean
+- Use require(success, "Call failed") or custom error handling
+
+References
+----------
+- SWC Registry: Unchecked Call Return Value
+  https://swc-registry.io/docs/SWC-104
+- Solidity Docs: Error Handling & Low-Level Calls
+  https://docs.soliditylang.org/en/latest/control-structures.html#error-handling-assert-require-revert-and-exceptions
+- OpenZeppelin SafeERC20
+  https://docs.openzeppelin.com/contracts/4.x/api/token/erc20#SafeERC20
+
+Samples
+=======
+
+Example: unchecked_return_value.sol (vulnerable — unchecked_return_value)
+Type: vulnerable
+Notes:
+callnotchecked() ignores return value — if callee reverts or runs OOG, execution continues silently.
+```solidity
+pragma solidity ^0.4.25;
+
+contract ReturnValue {
+    function callchecked(address callee) public {
+        require(callee.call());  // Safe: reverts on failure
+    }
+
+    function callnotchecked(address callee) public {
+        callee.call();  // Dangerous: silently continues even if call fails
+    }
+}
+Example: unchecked_send.sol (vulnerable — unchecked_return_value)
+Type: vulnerable
+Notes:
+.send() returns bool but it's ignored → Ether may be stuck if recipient reverts.
+soliditypragma solidity ^0.8.0;
+
+contract BadPayout {
+    function payout(address payable recipient, uint256 amount) public {
+        recipient.send(amount);  // No check — fails silently
+    }
+}
+Example: unchecked_erc20_transfer.sol (vulnerable — unchecked_return_value)
+Type: vulnerable
+Notes:
+Many old tokens (e.g. USDT) do NOT revert on failed transfer and return false instead.
+soliditypragma solidity ^0.8.0;
+
+contract RiskyTokenHandler {
+    function transferToken(address token, address to, uint256 amount) public {
+        token.call(abi.encodeWithSelector(0xa9059cbb, to, amount));  // No check!
+        // Assumes transfer succeeded — may be wrong
+    }
+}
+Example: safe_low_level_call.sol (safe — unchecked_return_value)
+Type: safe
+Notes:
+Properly checks return value and handles failure.
+soliditypragma solidity ^0.8.20;
+
+contract SafeCall {
+    function safeCall(address target, bytes memory data) public returns (bool success, bytes memory result) {
+        (success, result) = target.call(data);
+        require(success, "External call failed");
+    }
+
+    function safeEtherSend(address payable to, uint256 amount) public {
+        (bool sent, ) = to.call{value: amount}("");
+        require(sent, "Failed to send Ether");
+    }
+}
+Example: safe_erc20_with_safeerc20.sol (safe — unchecked_return_value)
+Type: safe
+Notes:
+Using OpenZeppelin’s SafeERC20 — automatically reverts on failure, even for non-compliant tokens.
+soliditypragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
+contract SafeTokenHandler {
+    using SafeERC20 for IERC20;
+
+    function safeTransfer(IERC20 token, address to, uint256 amount) public {
+        token.safeTransfer(to, amount);  // Reverts if transfer fails or returns false
+    }
+
+    function safeTransferFrom(IERC20 token, address from, address to, uint256 amount) public {
+        token.safeTransferFrom(from, to, amount);  // Safe even with old tokens
+    }
+}

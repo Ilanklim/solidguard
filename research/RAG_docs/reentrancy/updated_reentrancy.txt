@@ -1,0 +1,159 @@
+Title: Reentrancy (AttackType: reentrancy)
+SWC: SWC-107
+OWASP: SC05:2025
+
+Description
+-----------
+Reentrancy (also called a recursive call attack) occurs when a contract calls an external contract, and that external contract calls back into the original contract before the first invocation has finished. This allows multiple overlapping executions of the same function, which can cause state to be updated in unexpected or unsafe ways (for example, draining funds before balances are reduced).
+
+Key Patterns
+------------
+- The contract makes an external call to an untrusted address (msg.sender.call, address.call, etc.).
+- The external call happens BEFORE critical state updates (like balance reductions).
+- The callee contract can re-enter the victim function via fallback() or receive().
+- Typical exploit pattern: withdrawal functions where the state update comes after sending ETH.
+
+Impact
+------
+- Attackers can repeatedly withdraw funds.
+- Internal balances become corrupted.
+- Contract invariants break, affecting all users.
+
+Remediation
+-----------
+- Follow the Checks-Effects-Interactions pattern:
+  1. Validate inputs and permissions.
+  2. Update internal state.
+  3. Make external calls last.
+- Use a nonReentrant guard (e.g., OpenZeppelin’s ReentrancyGuard).
+- Prefer pull payments over push payments.
+- Avoid low-level calls unless necessary.
+
+References
+----------
+- SWC Registry (Reentrancy): https://swcregistry.io/docs/SWC-107
+- OWASP Smart Contract Top 10: Reentrancy: https://owasp.org/www-project-smart-contract-top-10/2025/en/src/SC05-reentrancy-attacks.html
+
+Samples
+=======
+
+Example: modifier_reentrancy.sol (vulnerable — reentrancy)
+---------------------------------------------------------
+Type: vulnerable
+Notes:
+- Shows how modifier ordering + external calls can allow unintended reentrant flows.
+
+```solidity
+pragma solidity ^0.5.0;
+
+contract ModifierEntrancy {
+  mapping (address => uint) public tokenBalance;
+  string constant name = "Nu Token";
+  Bank bank;
+
+  constructor() public {
+      bank = new Bank();
+  }
+
+  function airDrop() hasNoBalance supportsToken public {
+    tokenBalance[msg.sender] += 20;
+  }
+
+  modifier supportsToken() {
+    require(keccak256(abi.encodePacked("Nu Token")) == bank.supportsToken());
+    _;
+  }
+
+  modifier hasNoBalance {
+      require(tokenBalance[msg.sender] == 0);
+      _;
+  }
+}
+
+contract Bank {
+    function supportsToken() external returns(bytes32) {
+        return keccak256(abi.encodePacked("Nu Token"));
+    }
+}
+Example: modifier_reentrancy_fixed.sol (fixed — reentrancy)
+Type: fixed
+pragma solidity ^0.5.0;
+
+contract ModifierEntrancy {
+  mapping (address => uint) public tokenBalance;
+  string constant name = "Nu Token";
+  Bank bank;
+
+  constructor() public {
+      bank = new Bank();
+  }
+
+  function airDrop() supportsToken hasNoBalance public {
+    tokenBalance[msg.sender] += 20;
+  }
+
+  modifier supportsToken() {
+    require(keccak256(abi.encodePacked("Nu Token")) == bank.supportsToken());
+    _;
+  }
+
+  modifier hasNoBalance {
+      require(tokenBalance[msg.sender] == 0);
+      _;
+  }
+}
+
+contract Bank {
+    function supportsToken() external returns(bytes32) {
+        return keccak256(abi.encodePacked("Nu Token"));
+    }
+}
+Example: simple_dao.sol (vulnerable — reentrancy)
+Type: vulnerable
+Notes:
+Classic reentrancy: update to state AFTER external call.
+pragma solidity 0.4.24;
+
+contract SimpleDAO {
+  mapping (address => uint) public credit;
+
+  function donate(address to) public payable {
+    credit[to] += msg.value;
+  }
+
+  function withdraw(uint amount) public {
+    if (credit[msg.sender] >= amount) {
+      // VULNERABLE: external call before updating credit
+      require(msg.sender.call.value(amount)());
+      credit[msg.sender] -= amount;
+    }
+  }
+
+  function queryCredit(address to) public view returns(uint) {
+    return credit[to];
+  }
+}
+Example: simple_dao_fixed.sol (fixed — reentrancy)
+Type: fixed
+Notes:
+Applies Checks-Effects-Interactions properly.
+pragma solidity 0.4.24;
+
+contract SimpleDAO {
+  mapping (address => uint) public credit;
+
+  function donate(address to) public payable {
+    credit[to] += msg.value;
+  }
+
+  function withdraw(uint amount) public {
+    if (credit[msg.sender] >= amount) {
+      credit[msg.sender] -= amount;   // FIX: update state first
+      require(msg.sender.call.value(amount)());
+    }
+  }
+
+  function queryCredit(address to) public view returns (uint) {
+    return credit[to];
+  }
+}

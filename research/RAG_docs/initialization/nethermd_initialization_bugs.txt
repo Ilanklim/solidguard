@@ -1,0 +1,62 @@
+Vaulnerability Name: initialization
+Title: Initialization Bugs
+
+Relationships:
+- Related Concept: Upgradeable Contracts
+- Related Concept: Uninitialized State Variables
+
+Description:
+Initialization bugs occur when smart contracts are not properly initialized during deployment. These bugs allow attackers to take control of the implementation contract to manipulate its state, leading to unauthorized actions and financial losses.
+
+An example of this vulnerability is the Parity Wallet hack, where an attacker was able to set their address as the owner state variable and disabled the contract, freezing ~$150 million.
+
+Remediation:
+Ensure all contracts are properly initialized during deployment. Double-check that they can not be reinitialized or initialized by any unauthorized third party. We recommend using OpenZeppelin’s library when developing upgradable protocols to keep track of initialization.
+
+References:
+- Parity Wallet Hack
+
+Vulnerable Example:
+pragma solidity ^0.8.0;
+
+contract VulnerableInitialization {
+    address public owner;
+    bool public initialized;
+
+    // Vulnerability described: contract not initialized during deployment
+    function initialize(address newOwner) public {
+        // Anyone can call this if initialization was never done
+        require(!initialized, "Already initialized");
+        owner = newOwner;
+        initialized = true;
+    }
+
+    function disable() public {
+        require(msg.sender == owner, "Not authorized");
+        // Contract disabling logic would go here
+    }
+}
+
+Fixed Example:
+pragma solidity ^0.8.0;
+
+contract SafeInitialization {
+    address public owner;
+    bool public initialized;
+
+    // Proper initialization performed once at deployment
+    constructor() {
+        owner = msg.sender;
+        initialized = true;
+    }
+
+    // Prevents reinitialization by unauthorized parties
+    function initialize(address) public {
+        require(false, "Initialization disabled");
+    }
+
+    function disable() public {
+        require(msg.sender == owner, "Not authorized");
+        // Contract disabling logic would go here
+    }
+}

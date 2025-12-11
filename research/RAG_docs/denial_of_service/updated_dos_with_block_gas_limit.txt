@@ -1,0 +1,162 @@
+Vulnerability Name: denial_of_service
+Title: Denial of Service with Block Gas Limit (AttackType: denial_of_service)
+SWC: SWC-128
+CWE: CWE-400 (Uncontrolled Resource Consumption), CWE-834 (Excessive Iteration)
+
+Description
+-----------
+Smart contract functions that iterate over unbounded or user-controlled dynamic data structures (arrays, mappings with dynamic keys, etc.) can exceed the block gas limit as the data grows over time. Even if a single transaction succeeds today, future calls may become permanently impossible when the required gas exceeds the current block gas limit (typically ~30M gas on Ethereum mainnet). This creates a Denial of Service (DoS) condition where critical functionality (payouts, withdrawals, cleanup) becomes permanently stuck.
+
+Key Patterns
+------------
+- Loops over arrays of unbounded/user-controlled size
+- Distributing Ether/tokens to an array of recipients in a single transaction
+- Clearing or resizing large dynamic arrays
+- Using push() repeatedly without bounds
+- Functions that grow storage (array.length++) in a loop
+- Assuming constant-time operations on large datasets
+
+Impact
+------
+- Legitimate users cannot execute critical functions (e.g. withdraw, claim rewards)
+- Funds can become permanently locked
+- Contract becomes unmaintainable or unupgradable
+- Attackers can force DoS by spamming the array
+
+Remediation
+-----------
+- Avoid looping over unbounded arrays — use pull-over-push patterns (users claim individually)
+- Implement pagination or chunked processing for large datasets
+- Use mappings instead of arrays when possible
+- For cleanup: use delete + index tracking or allow owner to remove entries incrementally
+- Prefer the "withdraw" pattern: users call a function to claim their share instead of contract pushing to many users
+- If iteration is unavoidable, design for multi-transaction execution
+
+References
+----------
+- SWC Registry: DoS with Block Gas Limit
+  https://swc-registry.io/docs/SWC-128
+- ConsenSys: Known Attacks — Denial of Service
+  https://consensys.github.io/smart-contract-best-practices/attacks/denial-of-service/
+
+Samples
+=======
+
+Example: dos_address.sol (vulnerable — denial_of_service)
+Type: vulnerable
+Notes:
+emptyCreditors() clears the array by reassignment. When creditorAddresses.length > ~1500, this exceeds block gas limit → function becomes permanently unusable.
+```solidity
+pragma solidity ^0.4.25;
+
+contract DosGas {
+    address[] creditorAddresses;
+    bool win = false;
+
+    function emptyCreditors() public {
+        if(creditorAddresses.length > 1500) {
+            creditorAddresses = new address<a href="0" target="_blank" rel="noopener noreferrer nofollow"></a>;  // Gas explosion when array is large
+            win = true;
+        }
+    }
+
+    function addCreditors() public returns (bool) {
+        for(uint i = 0; i < 350; i++) {
+            creditorAddresses.push(msg.sender);
+        }
+        return true;
+    }
+}
+Example: dos_number.sol (vulnerable — denial_of_service)
+Type: vulnerable
+Notes:
+clearDOS() reassigns a huge array → will eventually exceed block gas limit. insertNnumbers() with large numbers can also cause gas DoS.
+soliditypragma solidity ^0.4.25;
+
+contract DosNumber {
+    uint numElements = 0;
+    uint[] array;
+
+    function insertNnumbers(uint value, uint numbers) public {
+        for(uint i = 0; i < numbers; i++) {
+            if(numElements == array.length) {
+                array.length += 1;
+            }
+            array[numElements++] = value;
+        }
+    }
+
+    function clearDOS() public {
+        require(numElements > 1500);
+        array = new uint<a href="0" target="_blank" rel="noopener noreferrer nofollow"></a>;  // Gas DoS when array is large
+        numElements = 0;
+    }
+}
+Example: dos_simple.sol (vulnerable — denial_of_service)
+Type: vulnerable
+Notes:
+Classic example: ifillArray() tries to clear a large array when length >= 1500 → becomes impossible due to gas limit.
+soliditypragma solidity ^0.4.25;
+
+contract DosOneFunc {
+    address[] listAddresses;
+
+    function ifillArray() public returns (bool) {
+        if(listAddresses.length < 1500) {
+            for(uint i = 0; i < 350; i++) {
+                listAddresses.push(msg.sender);
+            }
+            return true;
+        } else {
+            listAddresses = new address<a href="0" target="_blank" rel="noopener noreferrer nofollow"></a>;  // Will fail when array grows too large
+            return false;
+        }
+    }
+}
+Example: payout_pull_pattern.sol (safe — denial_of_service)
+Type: safe
+Notes:
+Recommended fix: pull-over-push. Users call claim() individually → no gas limit risk regardless of recipient count.
+soliditypragma solidity ^0.8.20;
+
+contract PullOverPush {
+    mapping(address => uint256) public credits;
+    uint256 public totalDistributed;
+
+    function distribute(address[] memory recipients, uint256 amountEach) external {
+        for (uint i = 0; i < recipients.length; i++) {
+            credits[recipients[i]] += amountEach;
+        }
+        totalDistributed += recipients.length * amountEach;
+    }
+
+    function claim() external {
+        uint256 amount = credits[msg.sender];
+        require(amount > 0, "Nothing to claim");
+        credits[msg.sender] = 0;
+        payable(msg.sender).transfer(amount);
+    }
+}
+Example: chunked_cleanup.sol (safe — denial_of_service)
+Type: safe
+Notes:
+Safe cleanup: owner removes entries in batches of 100 → never exceeds gas limit.
+soliditypragma solidity ^0.8.20;
+
+contract ChunkedCleanup {
+    address[] public creditors;
+    uint256 public removedCount = 0;
+
+    function removeBatch(uint256 batchSize) external {
+        require(batchSize <= 100, "Batch too large");
+        uint256 start = removedCount;
+        uint256 end = start + batchSize;
+        if (end > creditors.length) end = creditors.length;
+
+        for (uint256 i = start; i < end; i++) {
+            creditors[i] = creditors[creditors.length - 1];
+            creditors.pop();
+        }
+        removedCount = end;
+    }
+}

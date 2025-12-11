@@ -1,0 +1,159 @@
+Vulnerability Name: reentrancy
+Title: Reentrancy (AttackType: reentrancy)
+SWC: SWC-107
+CWE: CWE-841 (Improper Enforcement of Behavioral Workflow), CWE-362 (Race Condition)
+
+Description
+-----------
+Reentrancy occurs when a contract makes an external call (via .call, .transfer, .send, or delegatecall) before fully updating its internal state. A malicious contract in the call stack can recursively re-enter the original function, exploiting stale state (e.g., balances, ownership, counters). This is the most infamous Solidity vulnerability — responsible for The DAO hack (2016), which drained ~$60M+ and triggered the Ethereum/Ethereum Classic hard fork.
+
+Even with Solidity >=0.8 and checked arithmetic, reentrancy remains a top risk in DeFi, bridges, and any contract holding funds.
+
+Key Patterns
+------------
+- External call before state update (violates Checks-Effects-Interactions)
+- Using .call{value: }("") without protection
+- Single-function reentrancy (same function)
+- Cross-function reentrancy (different functions share state)
+- Read-only reentrancy (view functions that assume consistent state)
+
+Impact
+------
+- Complete drainage of contract funds
+- Unauthorized state changes
+- Broken accounting and logic
+- Permanent loss of user funds
+
+Remediation
+-----------
+- Strictly follow Checks-Effects-Interactions (CEI) pattern
+- Use OpenZeppelin’s nonReentrant modifier (ReentrancyGuard)
+- Prefer .transfer() or .call with limited gas when possible
+- Use pull-over-push for withdrawals
+- Audit with tools like Slither, MythX, or manual reentrancy checks
+
+References
+----------
+- SWC Registry: Reentrancy
+  https://swc-registry.io/docs/SWC-107
+- The DAO Hack Explained
+  https://www.coindesk.com/learn/2016/06/25/understanding-the-dao-attack/
+- OpenZeppelin ReentrancyGuard
+  https://docs.openzeppelin.com/contracts/4.x/api/security#ReentrancyGuard
+- OWASP Smart Contract Top 10 (2025) — SC05: Reentrancy Attacks
+
+Samples
+=======
+
+Example: dao_style_reentrancy.sol (vulnerable — reentrancy)
+Type: vulnerable
+Notes:
+Classic DAO-style single-function reentrancy. Attacker drains all funds by recursively calling withdraw() before balance is set to 0.
+```solidity
+pragma solidity ^0.6.0;
+
+contract VulnerableBank {
+    mapping(address => uint256) public balances;
+
+    function deposit() external payable {
+        balances[msg.sender] += msg.value;
+    }
+
+    function withdraw() external {
+        uint256 amount = balances[msg.sender];
+        require(amount > 0, "No funds");
+
+        // External call BEFORE state update → reentrancy risk
+        (bool sent, ) = msg.sender.call{value: amount}("");
+        require(sent, "Transfer failed");
+
+        balances[msg.sender] = 0;  // Too late!
+    }
+
+    function balance() external view returns (uint256) {
+        return address(this).balance;
+    }
+}
+Example: cross_function_reentrancy.sol (vulnerable — reentrancy)
+Type: vulnerable
+Notes:
+Cross-function reentrancy: withdrawAll() and withdraw() share the same balance mapping → attacker reenters withdrawAll() via withdraw().
+soliditypragma solidity ^0.8.0;
+
+contract CrossFunctionReentrancy {
+    mapping(address => uint256) public balances;
+
+    function withdraw(uint256 amount) external {
+        require(balances[msg.sender] >= amount);
+        (bool success, ) = msg.sender.call{value: amount}("");
+        require(success);
+        balances[msg.sender] -= amount;
+    }
+
+    function withdrawAll() external {
+        uint256 amount = balances[msg.sender];
+        require(amount > 0);
+        (bool success, ) = msg.sender.call{value: amount}("");
+        require(success);
+        balances[msg.sender] = 0;  // Reentrancy possible via withdraw()
+    }
+}
+Example: safe_with_cei.sol (safe — reentrancy)
+Type: safe
+Notes:
+Strict CEI: state updated before external call.
+soliditypragma solidity ^0.8.20;
+
+contract SafeBankCEI {
+    mapping(address => uint256) public balances;
+
+    function withdraw() external {
+        uint256 amount = balances[msg.sender];
+        require(amount > 0, "No funds");
+
+        balances[msg.sender] = 0;  // Effects first
+
+        (bool sent, ) = msg.sender.call{value: amount}("");
+        require(sent, "Transfer failed");
+    }
+}
+Example: safe_with_reentrancy_guard.sol (safe — reentrancy)
+Type: safe
+Notes:
+Gold standard: OpenZeppelin ReentrancyGuard.
+soliditypragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+
+contract SafeBank is ReentrancyGuard {
+    mapping(address => uint256) public balances;
+
+    function withdraw() external nonReentrant {
+        uint256 amount = balances[msg.sender];
+        require(amount > 0);
+
+        balances[msg.sender] = 0;
+        (bool sent, ) = msg.sender.call{value: amount}("");
+        require(sent);
+    }
+}
+Example: pull_over_push.sol (safe — reentrancy)
+Type: safe
+Notes:
+Best for payouts: users withdraw individually → no external call loop.
+soliditypragma solidity ^0.8.20;
+
+contract PullPayment {
+    mapping(address => uint256) public credits;
+
+    function addCredit(address user, uint256 amount) external {
+        credits[user] += amount;
+    }
+
+    function withdraw() external {
+        uint256 amount = credits[msg.sender];
+        require(amount > 0);
+        credits[msg.sender] = 0;
+        payable(msg.sender).transfer(amount);
+    }
+}

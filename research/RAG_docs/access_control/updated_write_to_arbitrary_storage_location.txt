@@ -1,0 +1,340 @@
+Vulnerability Name: access_control
+Title: Missing or Insufficient Access Controls & Exposed Initialization (AttackType: access_control)
+SWC: SWC-105, SWC-118 (related)
+CWE: CWE-284 (Improper Access Control), CWE-665 (Improper Initialization)
+
+Description
+-----------
+Privileged operations — such as withdrawing Ether, changing ownership, collecting fees, modifying critical parameters, or initializing contract state — are not properly restricted. This allows any caller to execute them. Common root causes include missing access control modifiers, misnamed constructors (in Solidity <0.7), publicly callable initializer functions, or logic errors in custom ownership systems.
+
+Key Patterns
+------------
+- Sensitive functions (withdraw, migrate, changeOwner, collectFees, selfdestruct, etc.) without proper require() or modifiers
+- Constructor name does not match contract name (pre-0.7 Solidity)
+- Public initializer/setup function that should only be called once
+- Missing onlyOwner / access control modifier on ownership-granting functions
+- Use of tx.origin for authorization
+- Functions that allow anyone to re-initialize critical state
+
+Impact
+------
+Attackers can:
+- Drain all Ether from the contract
+- Steal ownership or privileged roles
+- Re-initialize the contract and lock out legitimate owners
+- Permanently disrupt contract functionality
+
+Remediation
+-----------
+- Use OpenZeppelin's Ownable, AccessControl, or well-audited multi-signature patterns
+- Protect every privileged function with appropriate modifiers or require checks
+- In Solidity ≥0.7, always use the `constructor` keyword
+- Never rely on function name for constructor logic in older versions
+- Use initializer patterns (e.g., Initializable from OpenZeppelin) for upgradeable contracts
+- Validate and enforce ownership at every state change
+
+References
+----------
+- SWC Registry: Unprotected Ether Withdrawal
+  https://swc-registry.io/docs/SWC-105
+- SWC Registry: Incorrect Constructor Name
+  https://swc-registry.io/docs/SWC-118
+- OpenZeppelin Access Control Guide
+  https://docs.openzeppelin.com/contracts/4.x/access-control
+
+Samples
+=======
+
+Example: simple_ether_drain.sol (vulnerable — access_control)
+Type: vulnerable
+Notes:
+Completely unprotected withdrawal — any caller can drain the entire contract balance.
+```solidity
+pragma solidity ^0.4.22;
+
+contract SimpleEtherDrain {
+    function withdrawAllAnyone() public {
+        msg.sender.transfer(address(this).balance);
+    }
+
+    function () public payable {}
+}
+Example: rubixi.sol (vulnerable — access_control)
+Type: vulnerable
+Notes:
+The constructor is named DynamicPyramid() instead of Rubixi(), making it a public function. Anyone can call it to become the creator (owner) and drain all collected fees.
+soliditypragma solidity ^0.4.22;
+
+contract Rubixi {
+    uint private balance = 0;
+    uint private collectedFees = 0;
+    uint private feePercent = 10;
+    uint private pyramidMultiplier = 300;
+    uint private payoutOrder = 0;
+    address private creator;
+
+    function DynamicPyramid() public {
+        creator = msg.sender;
+    }
+
+    modifier onlyowner {
+        if (msg.sender == creator) _;
+    }
+
+    struct Participant {
+        address etherAddress;
+        uint payout;
+    }
+
+    Participant[] private participants;
+
+    function() public payable {
+        init();
+    }
+
+    function init() private {
+        if (msg.value < 1 ether) {
+            collectedFees += msg.value;
+            return;
+        }
+        uint _fee = feePercent;
+        if (msg.value >= 50 ether) _fee /= 2;
+        addPayout(_fee);
+    }
+
+    function addPayout(uint _fee) private {
+        participants.push(Participant(msg.sender, (msg.value * pyramidMultiplier) / 100));
+        if (participants.length == 10) pyramidMultiplier = 200;
+        else if (participants.length == 25) pyramidMultiplier = 150;
+
+        balance += (msg.value * (100 - _fee)) / 100;
+        collectedFees += (msg.value * _fee) / 100;
+
+        while (balance > participants[payoutOrder].payout) {
+            uint payoutToSend = participants[payoutOrder].payout;
+            participants[payoutOrder].etherAddress.send(payoutToSend);
+            balance -= participants[payoutOrder].payout;
+            payoutOrder += 1;
+        }
+    }
+
+    function collectAllFees() public onlyowner {
+        if (collectedFees == 0) revert();
+        creator.send(collectedFees);
+        collectedFees = 0;
+    }
+
+    function changeOwner(address _owner) public onlyowner {
+        creator = _owner;
+    }
+}
+Example: wallet_03_wrong_constructor.sol (vulnerable — access_control)
+Type: vulnerable
+Notes:
+Constructor misnamed as initWallet(). Anyone can call it to become creator and migrate all funds.
+soliditypragma solidity ^0.4.24;
+
+contract Wallet {
+    address creator;
+    mapping(address => uint256) balances;
+
+    function initWallet() public {
+        creator = msg.sender;
+    }
+
+    function deposit() public payable {
+        assert(balances[msg.sender] + msg.value > balances[msg.sender]);
+        balances[msg.sender] += msg.value;
+    }
+
+    function withdraw(uint256 amount) public {
+        require(amount <= balances[msg.sender]);
+        msg.sender.transfer(amount);
+        balances[msg.sender] -= amount;
+    }
+
+    function migrateTo(address to) public {
+        require(creator == msg.sender);
+        to.transfer(address(this).balance);
+    }
+}
+Example: multiowned_vulnerable.sol (vulnerable — access_control)
+Type: vulnerable
+Notes:
+newOwner() is missing the onlyOwner modifier — anyone can add themselves (or others) as owner and drain funds.
+soliditypragma solidity ^0.4.23;
+
+contract MultiOwnable {
+    address public root;
+    mapping (address => address) public owners;
+
+    constructor() public {
+        root = msg.sender;
+        owners[root] = root;
+    }
+
+    modifier onlyOwner() {
+        require(owners[msg.sender] != 0);
+        _;
+    }
+
+    // Missing onlyOwner!
+    function newOwner(address _owner) external returns (bool) {
+        require(_owner != 0);
+        owners[_owner] = msg.sender;
+        return true;
+    }
+
+    function deleteOwner(address _owner) onlyOwner external returns (bool) {
+        require(owners[_owner] == msg.sender || (owners[_owner] != 0 && msg.sender == root));
+        owners[_owner] = 0;
+        return true;
+    }
+}
+
+contract TestContract is MultiOwnable {
+    function withdrawAll() onlyOwner public {
+        msg.sender.transfer(address(this).balance);
+    }
+
+    function() payable external {}
+}
+Example: wallet_02_refund_nosub.sol (vulnerable — access_control)
+Type: vulnerable
+Notes:
+refund() sends funds but never resets the balance — users can drain the contract repeatedly.
+soliditypragma solidity ^0.4.24;
+
+contract Wallet {
+    address creator;
+    mapping(address => uint256) balances;
+
+    constructor() public {
+        creator = msg.sender;
+    }
+
+    function deposit() public payable {
+        assert(balances[msg.sender] + msg.value > balances[msg.sender]);
+        balances[msg.sender] += msg.value;
+    }
+
+    function withdraw(uint256 amount) public {
+        require(amount <= balances[msg.sender]);
+        msg.sender.transfer(amount);
+        balances[msg.sender] -= amount;
+    }
+
+    function refund() public {
+        msg.sender.transfer(balances[msg.sender]);
+        // Missing: balances[msg.sender] = 0;
+    }
+
+    function migrateTo(address to) public {
+        require(creator == msg.sender);
+        to.transfer(address(this).balance);
+    }
+}
+Example: tokensalechallenge.sol (vulnerable — arithmetic)
+Type: vulnerable
+Notes:
+Famous challenge — vulnerable to integer overflow in buy() due to missing SafeMath. Not an access control issue. Primary category: arithmetic.
+soliditypragma solidity ^0.4.21;
+
+contract TokenSaleChallenge {
+    mapping(address => uint256) public balanceOf;
+    uint256 constant PRICE_PER_TOKEN = 1 ether;
+
+    function TokenSaleChallenge(address _player) public payable {
+        require(msg.value == 1 ether);
+    }
+
+    function isComplete() public view returns (bool) {
+        return address(this).balance < 1 ether;
+    }
+
+    function buy(uint256 numTokens) public payable {
+        require(msg.value == numTokens * PRICE_PER_TOKEN);
+        balanceOf[msg.sender] += numTokens;
+    }
+
+    function sell(uint256 numTokens) public {
+        require(balanceOf[msg.sender] >= numTokens);
+        balanceOf[msg.sender] -= numTokens;
+        msg.sender.transfer(numTokens * PRICE_PER_TOKEN);
+    }
+}
+Example: multiowned_not_vulnerable.sol (safe — access_control)
+Type: safe
+Notes:
+newOwner() correctly restricted by onlyOwner modifier — secure multi-ownership pattern.
+soliditypragma solidity ^0.4.23;
+
+contract MultiOwnable {
+    address public root;
+    mapping (address => address) public owners;
+
+    constructor() public {
+        root = msg.sender;
+        owners[root] = root;
+    }
+
+    modifier onlyOwner() {
+        require(owners[msg.sender] != 0);
+        _;
+    }
+
+    function newOwner(address _owner) onlyOwner external returns (bool) {
+        require(_owner != 0);
+        owners[_owner] = msg.sender;
+        return true;
+    }
+
+    function deleteOwner(address _owner) onlyOwner external returns (bool) {
+        require(owners[_owner] == msg.sender || (owners[_owner] != 0 && msg.sender == root));
+        owners[_owner] = 0;
+        return true;
+    }
+}
+
+contract TestContract is MultiOwnable {
+    function withdrawAll() onlyOwner public {
+        msg.sender.transfer(address(this).balance);
+    }
+
+    function() payable external {}
+}
+Example: wallet_01_ok.sol (safe — access_control)
+Type: safe
+Notes:
+Proper access control: user withdrawals limited to balance, emergency migration only by creator, refund() correctly resets balance.
+soliditypragma solidity ^0.4.24;
+
+contract Wallet {
+    address creator;
+    mapping(address => uint256) balances;
+
+    constructor() public {
+        creator = msg.sender;
+    }
+
+    function deposit() public payable {
+        assert(balances[msg.sender] + msg.value > balances[msg.sender]);
+        balances[msg.sender] += msg.value;
+    }
+
+    function withdraw(uint256 amount) public {
+        require(amount <= balances[msg.sender]);
+        msg.sender.transfer(amount);
+        balances[msg.sender] -= amount;
+    }
+
+    function refund() public {
+        msg.sender.transfer(balances[msg.sender]);
+        balances[msg.sender] = 0;
+    }
+
+    function migrateTo(address to) public {
+        require(creator == msg.sender);
+        to.transfer(address(this).balance);
+    }
+}

@@ -1,0 +1,163 @@
+Vulnerability Name: signature_verification
+Title: Lack of Proper Signature Verification & Signature Malleability/Replay (AttackType: signature_verification)
+SWC: SWC-122, SWC-136 (Signature Malleability)
+CWE: CWE-345 (Insufficient Verification of Data Authenticity), CWE-347 (Improper Verification of Cryptographic Signature)
+
+Description
+-----------
+Smart contracts often accept off-chain signed messages (via EIP-191, EIP-712, or raw eth_sign) to enable gasless or meta-transactions. Incorrect or incomplete signature verification allows attackers to:
+- Forge signatures
+- Replay valid signatures across chains/contracts
+- Exploit signature malleability (same message signed in two valid ways)
+- Bypass authorization by abusing msg.sender assumptions in relay/proxy patterns
+
+Real-world examples:
+- Wormhole Bridge Hack (2022) — forged VAA via flawed Guardian signature validation
+- Multiple ERC-20 permit() exploits due to missing/invalid chain ID or domain separator checks
+
+Key Patterns
+------------
+- Using msg.sender as proxy for signer identity (dangerous with relayers)
+- No or weak replay protection (missing nonce, timestamp, or usedHashes)
+- Not using EIP-712 typed data hashing
+- Accepting raw eth_sign without prefix ("\x19Ethereum Signed Message:\n32")
+- Missing chainId or verifyingContract in domain separator
+- Allowing both malleable (v=27/28) and non-malleable (v=0/1) signatures
+- Trusting ECDSA.recover without validating return address != 0
+
+Impact
+------
+- Unauthorized token transfers (permit, executeMetaTransaction)
+- Drained vaults or bridges
+- Double-spending of signed intents
+- Permanent loss of funds
+
+Remediation
+-----------
+- Always use OpenZeppelin’s ECDSA library with strict checks
+- Prefer EIP-712 typed signatures with proper domain separator (chainId + verifyingContract)
+- Enforce replay protection: nonce per user, per-chain unique hash, or block timestamp windows
+- Reject address(0) from recover
+- Normalize signatures: reject malleable v (27/28), accept only v=0/1 or use toEthereumSignedMessage
+- Never trust msg.sender as the signer in meta-transaction flows
+
+References
+----------
+- SWC Registry: Lack of Proper Signature Verification
+  https://swc-registry.io/docs/SWC-122
+- EIP-712: Typed Structured Data Hashing and Signing
+  https://eips.ethereum.org/EIPS/eip-712
+- OpenZeppelin ECDSA Documentation
+  https://docs.openzeppelin.com/contracts/4.x/api/utils#ECDSA
+- Wormhole Bridge Hack Postmortem (2022)
+
+Samples
+=======
+
+Example: msg_sender_trust.sol (vulnerable — signature_verification)
+Type: vulnerable
+Notes:
+Classic meta-tx flaw: assumes msg.sender is the real signer. A malicious relayer can forge any action.
+```solidity
+pragma solidity ^0.8.20;
+
+contract VulnerableMetaTx {
+    function execute(bytes memory signature, uint256 value) public {
+        address signer = msg.sender;  // Wrong! This is the relayer, not the signer
+        // ... execute action as signer
+    }
+}
+Example: weak_replay_protection.sol (vulnerable — signature_verification)
+Type: vulnerable
+Notes:
+Only checks hash usage — attacker can replay same signature on different chains or forked contracts.
+soliditypragma solidity ^0.8.20;
+
+contract WeakReplay {
+    mapping(bytes32 => bool) public used;
+
+    function execute(bytes32 hash, bytes memory sig) public {
+        require(!used[hash], "Replay");
+        address signer = recoverSigner(hash, sig);
+        require(signer != address(0));
+        used[hash] = true;
+        // execute
+    }
+
+    function recoverSigner(bytes32 hash, bytes memory sig) internal pure returns (address) {
+        // Simplified — real version would use ECDSA
+        (bytes32 r, bytes32 s, uint8 v) = splitSignature(sig);
+        return ecrecover(hash, v, r, s);
+    }
+}
+Example: eip712_permit.sol (safe — signature_verification)
+Type: safe
+Notes:
+Gold standard: EIP-712 with domain separator, nonce, and strict checks.
+soliditypragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+
+contract ERC20Permit is EIP712 {
+    mapping(address => uint256) public nonces;
+
+    bytes32 private constant _PERMIT_TYPEHASH =
+        keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
+
+    constructor() EIP712("MyToken", "1") {}
+
+    function permit(
+        address owner,
+        address spender,
+        uint256 value,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) public virtual {
+        require(block.timestamp <= deadline, "Permit expired");
+        bytes32 structHash = keccak256(abi.encode(_PERMIT_TYPEHASH, owner, spender, value, nonces[owner]++, deadline));
+        bytes32 hash = _hashTypedDataV4(structHash);
+        address signer = ECDSA.recover(hash, v, r, s);
+        require(signer == owner && signer != address(0), "Invalid signature");
+        _approve(owner, spender, value);
+    }
+
+    function _approve(address owner, address spender, uint256 amount) internal {}
+}
+Example: safe_meta_transaction.sol (safe — signature_verification)
+Type: safe
+Notes:
+Proper meta-transaction with EIP-712 and nonce-based replay protection.
+soliditypragma solidity ^0.8.20;
+
+contract SafeMetaTx is EIP712 {
+    mapping(address => uint256) public nonces;
+
+    struct ForwardRequest {
+        address from;
+        address to;
+        uint256 value;
+        uint256 gas;
+        uint256 nonce;
+        bytes data;
+    }
+
+    bytes32 private constant _TYPEHASH =
+        keccak256("ForwardRequest(address from,address to,uint256 value,uint256 gas,uint256 nonce,bytes data)");
+
+    function execute(ForwardRequest calldata req, bytes calldata signature) external {
+        require(nonces[req.from] == req.nonce, "Invalid nonce");
+        bytes32 structHash = keccak256(abi.encode(_TYPEHASH, req.from, req.to, req.value, req.gas, req.nonce, keccak256(req.data)));
+        bytes32 hash = _hashTypedDataV4(structHash);
+        address signer = ECDSA.recover(hash, signature);
+        require(signer == req.from && signer != address(0), "Invalid signature");
+
+        nonces[req.from]++;
+        (bool success, ) = req.to.call{value: req.value}(abi.encodePacked(req.data, req.from));
+        require(success, "Call failed");
+    }
+
+    constructor() EIP712("SafeMetaTx", "1") {}
+}

@@ -1,0 +1,152 @@
+Vulnerability Name: front_running
+Title: Transaction Order Dependence / Front-Running (AttackType: front_running)
+SWC: SWC-114
+CWE: CWE-362 (Race Condition), CWE-841 (Improper Enforcement of Behavioral Workflow)
+
+Description
+-----------
+Ethereum transactions are ordered by miners based on gas price and inclusion incentives. Any transaction visible in the mempool can be observed and front-run by another transaction with a higher gas price. This creates a race condition when contract logic depends on predictable transaction ordering — e.g., rewarding the "first" caller, updating approvals, or processing time-sensitive actions. The most common real-world example is the ERC20 approve() race condition, where a malicious spender can drain n + m tokens by front-running a change in allowance.
+
+Key Patterns
+------------
+- "First-come-first-served" reward mechanisms (e.g. puzzles, bug bounties, finders fees)
+- ERC20 approve() without protection against allowance change race
+- On-chain games or auctions where being first matters
+- Contracts that assume tx order reflects submission order
+- Public functions that change critical state based on caller timing
+
+Impact
+------
+- Legitimate users lose rewards to front-runners
+- ERC20 allowance race allows theft of n + m tokens instead of max(n,m)
+- Critical actions (e.g. protocol upgrades, emergency stops) can be delayed or hijacked
+- Loss of fairness and trust in the system
+
+Remediation
+-----------
+- Use commit-reveal schemes for submissions requiring fairness
+- For ERC20: implement increaseAllowance/decreaseAllowance or require zero-before-change
+- Add expectedCurrentAllowance parameter to approve() and revert if mismatched
+- Use off-chain signatures or private relays for sensitive actions
+- Accept that ordering is adversarial — design around it, not against it
+
+References
+----------
+- SWC Registry: Transaction Order Dependence
+  https://swc-registry.io/docs/SWC-114
+- OpenZeppelin ERC20: increaseAllowance/decreaseAllowance
+  https://docs.openzeppelin.com/contracts/4.x/api/token/erc20#ERC20-increaseAllowance-address-uint256-
+
+Samples
+=======
+
+Example: eth_tx_order_dependence_minimal.sol (vulnerable — front_running)
+Type: vulnerable
+Notes:
+Classic "finders fee" vulnerability. Anyone can front-run the owner's setReward() call with a higher gas price and claim the entire reward.
+```solidity
+pragma solidity ^0.4.16;
+
+contract EthTxOrderDependenceMinimal {
+    address public owner;
+    bool public claimed;
+    uint public reward;
+
+    constructor() public {
+        owner = msg.sender;
+    }
+
+    function setReward() public payable {
+        require(!claimed);
+        require(msg.sender == owner);
+        owner.transfer(reward);  // Drains previous reward
+        reward = msg.value;
+    }
+
+    function claimReward(uint256 submission) public {
+        require(!claimed);
+        require(submission < 10);
+        msg.sender.transfer(reward);
+        claimed = true;
+    }
+}
+Example: erc20_approve_race.sol (vulnerable — front_running)
+Type: vulnerable
+Notes:
+Standard ERC20 approve() — allows the infamous n + m attack when changing allowance.
+soliditypragma solidity ^0.8.20;
+
+contract ERC20 {
+    mapping(address => uint256) private _balances;
+    mapping(address => mapping(address => uint256)) private _allowances;
+
+    function approve(address spender, uint256 amount) public returns (bool) {
+        _allowances[msg.sender][spender] = amount;
+        emit Approval(msg.sender, spender, amount);
+        return true;
+    }
+
+    function transferFrom(address sender, address recipient, uint256 amount) public returns (bool) {
+        require(_allowances[sender][msg.sender] >= amount, "Insufficient allowance");
+        _allowances[sender][msg.sender] -= amount;
+        _balances[sender] -= amount;
+        _balances[recipient] += amount;
+        return true;
+    }
+
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+}
+Example: erc20_safe_approve.sol (safe — front_running)
+Type: safe
+Notes:
+Mitigates the race by requiring current allowance to be 0 before setting a new one.
+soliditypragma solidity ^0.8.20;
+
+contract ERC20SafeApprove {
+    mapping(address => mapping(address => uint256)) private _allowances;
+
+    function safeApprove(address spender, uint256 currentValue, uint256 newValue) public {
+        require(_allowances[msg.sender][spender] == currentValue, "Current allowance mismatch");
+        require(currentValue == 0 || newValue == 0, "Use increase/decreaseAllowance");
+        _allowances[msg.sender][spender] = newValue;
+        emit Approval(msg.sender, spender, newValue);
+    }
+
+    function increaseAllowance(address spender, uint256 addedValue) public {
+        _allowances[msg.sender][spender] += addedValue;
+        emit Approval(msg.sender, spender, _allowances[msg.sender][spender]);
+    }
+
+    function decreaseAllowance(address spender, uint256 subtractedValue) public {
+        _allowances[msg.sender][spender] -= subtractedValue;
+        emit Approval(msg.sender, spender, _allowances[msg.sender][spender]);
+    }
+
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+}
+Example: commit_reveal.sol (safe — front_running)
+Type: safe
+Notes:
+Commit-reveal scheme prevents front-running of puzzle solutions or bids.
+soliditypragma solidity ^0.8.20;
+
+contract CommitReveal {
+    mapping(address => bytes32) public commits;
+    mapping(address => uint256) public solutions;
+    bool public revealed;
+
+    function commit(bytes32 hashedSolution) external {
+        require(!revealed, "Already revealed");
+        commits[msg.sender] = hashedSolution;
+    }
+
+    function reveal(uint256 solution, uint256 salt) external {
+        require(!revealed, "Already revealed");
+        require(keccak256(abi.encodePacked(solution, salt, msg.sender)) == commits[msg.sender]);
+        solutions[msg.sender] = solution;
+        if (solution < 100) {
+            revealed = true;
+            payable(msg.sender).transfer(1 ether);
+        }
+    }
+}

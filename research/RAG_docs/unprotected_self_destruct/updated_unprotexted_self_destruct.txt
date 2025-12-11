@@ -1,0 +1,145 @@
+Vulnerability Name: unprotected_self_destruct
+Title: Unprotected SELFDESTRUCT Instruction (AttackType: unprotected_self_destruct)
+SWC: SWC-106
+CWE: CWE-284 (Improper Access Control)
+
+Description
+-----------
+The SELFDESTRUCT (formerly suicide) opcode permanently removes a contract from the blockchain and sends all its Ether to a designated address. If access to selfdestruct is not properly restricted, any user or attacker can irreversibly destroy the contract, rendering it unusable and potentially bricking all funds or logic forever.
+
+This was the root cause of the infamous second Parity Multisig Wallet hack (November 2017), where a user accidentally initialized and then called kill() on the shared library contract, destroying it and freezing ~$160M across hundreds of wallets.
+
+Key Patterns
+------------
+- Public or unprotected selfdestruct / suicide calls
+- selfdestruct callable by anyone or non-owner
+- Delegatecall into library contracts that contain unprotected selfdestruct
+- Missing onlyOwner or multisig guard on destruction logic
+
+Impact
+------
+- Permanent loss of contract functionality
+- Funds become permanently inaccessible
+- Ecosystem-wide damage (especially when shared libraries are destroyed)
+- Loss of user trust
+
+Remediation
+-----------
+- Remove selfdestruct entirely unless absolutely necessary
+- If kept: protect with strong multisig (e.g. Gnosis Safe) or timelock + governance
+- Never place selfdestruct in library contracts
+- Use upgradeable patterns (UUPS/Transparent) instead of destructive upgrades
+- Prefer logical "pause + withdraw" over total destruction
+
+References
+----------
+- SWC Registry: Unprotected SELFDESTRUCT
+  https://swc-registry.io/docs/SWC-106
+- Parity Multisig Hack #2 — "I accidentally killed it"
+  https://www.parity.io/blog/security-alert-2/
+- OpenZeppelin Ownable + Pausable instead of selfdestruct
+
+Samples
+=======
+
+Example: simple_suicide.sol (vulnerable — unprotected_self_destruct)
+Type: vulnerable
+Notes:
+Anyone can call and permanently destroy the contract.
+```solidity
+pragma solidity ^0.4.22;
+
+contract SimpleSuicide {
+    function sudicideAnyone() public {
+        selfdestruct(msg.sender);  // Anyone can kill the contract forever
+    }
+}
+Example: parity_wallet_library.sol (vulnerable — unprotected_self_destruct)
+Type: vulnerable
+Notes:
+Real-world disaster: the WalletLibrary had an initWallet() function that allowed anyone to become owner, then call kill() via multisig → destroyed shared library → bricked hundreds of wallets.
+soliditypragma solidity ^0.4.9;
+
+contract WalletLibrary {
+    address public owner;
+
+    // Anyone could call this and become owner
+    function initWallet(address[] _owners, uint _required, uint _daylimit) public {
+        // ... initialization logic
+        owner = msg.sender;  // Critical flaw: no access control!
+    }
+
+    function kill(address _to) external onlymanyowners(keccak256(msg.data)) {
+        selfdestruct(_to);  // Once owner, anyone could trigger this
+    }
+
+    modifier onlymanyowners(bytes32 _operation) { _; }
+}
+Example: suicide_multitx_feasible.sol (vulnerable — unprotected_self_destruct)
+Type: vulnerable
+Notes:
+Two-step activation — realistic attack: attacker calls init(), then run() → destroys contract.
+soliditypragma solidity ^0.4.23;
+
+contract SuicideMultiTxFeasible {
+    uint256 private initialized = 0;
+
+    function init() public {
+        initialized = 1;
+    }
+
+    function run() public {
+        require(initialized == 1);
+        selfdestruct(msg.sender);  // Attacker destroys contract
+    }
+}
+Example: safe_selfdestruct.sol (safe — unprotected_self_destruct)
+Type: safe
+Notes:
+Properly protected: only owner + explicit confirmation required.
+soliditypragma solidity ^0.8.20;
+
+contract SafeDestructible {
+    address public owner;
+    bool public destroyConfirmed = false;
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Not owner");
+        _;
+    }
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    function confirmDestroy() external onlyOwner {
+        destroyConfirmed = true;
+    }
+
+    function executeSelfDestruct(address payable recipient) external onlyOwner {
+        require(destroyConfirmed, "Destruction not confirmed");
+        selfdestruct(recipient);
+    }
+}
+Example: no_selfdestruct_preferred.sol (safe — unprotected_self_destruct)
+Type: safe
+Notes:
+Modern best practice: no selfdestruct at all — use pause + withdraw pattern.
+soliditypragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract ImmortalVault is Ownable, Pausable {
+    receive() external payable {}
+
+    function emergencyWithdraw(address payable to) external onlyOwner whenPaused {
+        to.transfer(address(this).balance);
+    }
+
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    // Contract lives forever — no selfdestruct
+}

@@ -1,0 +1,129 @@
+Vulnerability Name: denial_of_service
+Title: DoS with Failed External Call / Unexpected Revert (AttackType: denial_of_service)
+SWC: SWC-113
+CWE: CWE-703 (Improper Check or Handling of Exceptional Conditions)
+
+Description
+-----------
+External calls in Solidity (send, transfer, call) can fail either accidentally (e.g., recipient is a contract with a fallback that reverts, out-of-gas, or non-payable) or deliberately (malicious recipient). When such calls are performed in a loop without isolation, a single failure causes the entire transaction to revert, preventing the function from completing. This can lock funds permanently or make critical operations impossible.
+
+Key Patterns
+------------
+- Using .send() or .call() in a loop to distribute Ether/tokens
+- Using require() on the boolean result of .send() or low-level .call()
+- Pushing funds to multiple recipients in one transaction
+- Assuming external calls always succeed
+- Combining state updates with unisolated external calls
+
+Impact
+------
+- A single malicious or broken recipient blocks all others
+- Funds become permanently locked
+- Contract functionality (refunds, payouts, airdrops) becomes unusable
+- Attackers can grief the system at low cost
+
+Remediation
+-----------
+- Favor pull-over-push: record entitlements and let users withdraw individually
+- Never use require() on .send() or .call() return value — it reverts on failure
+- Isolate external calls: use a separate transaction per recipient if pushing is required
+- Use the Checks-Effects-Interactions pattern
+- Handle failures gracefully (e.g., skip failed recipients and log)
+
+References
+----------
+- SWC Registry: DoS with Failed Call
+  https://swc-registry.io/docs/SWC-113
+- ConsenSys Best Practices: Favor Pull Over Push
+  https://consensys.github.io/smart-contract-best-practices/recommendations/#favor-pull-over-push-for-external-calls
+- OpenZeppelin: Safe Remote Purchases (pull pattern example)
+
+Samples
+=======
+
+Example: send_loop.sol (vulnerable — denial_of_service)
+Type: vulnerable
+Notes:
+refundAll() uses require(send()) — if any recipient reverts or is non-payable, the entire refund process fails and all users are blocked.
+```solidity
+pragma solidity ^0.4.24;
+
+contract Refunder {
+    address[] private refundAddresses;
+    mapping(address => uint) public refunds;
+
+    constructor() {
+        refundAddresses.push(0x79B483371E87d664cd39491b5F06250165e4b184);
+        refundAddresses.push(0x79B483371E87d664cd39491b5F06250165e4b185);
+        refunds[refundAddresses[0]] = 1 ether;
+        refunds[refundAddresses[1]] = 1 ether;
+    }
+
+    // Extremely dangerous
+    function refundAll() public {
+        for(uint x; x < refundAddresses.length; x++) {
+            require(refundAddresses[x].send(refunds[refundAddresses[x]])); // One failure blocks everyone
+        }
+    }
+}
+Example: transfer_loop.sol (vulnerable — denial_of_service)
+Type: vulnerable
+Notes:
+Even .transfer() is unsafe in loops — if a recipient is a contract that reverts in fallback, the whole loop fails.
+soliditypragma solidity ^0.6.0;
+
+contract BadAuction {
+    address[] bidders;
+    mapping(address => uint) public refunds;
+
+    function refundAll() public {
+        for (uint i = 0; i < bidders.length; i++) {
+            bidders[i].transfer(refunds[bidders[i]]); // Reverts on any failure
+        }
+    }
+}
+Example: pull_pattern_safe.sol (safe — denial_of_service)
+Type: safe
+Notes:
+Pull-over-push pattern: users call withdraw() individually → no risk from others' failures.
+soliditypragma solidity ^0.8.20;
+
+contract GoodAuction {
+    mapping(address => uint256) public refunds;
+
+    function withdraw() external {
+        uint256 amount = refunds[msg.sender];
+        require(amount > 0, "No refund");
+        refunds[msg.sender] = 0;
+        payable(msg.sender).transfer(amount);
+    }
+
+    // Admin can add refunds anytime
+    function addRefund(address recipient, uint256 amount) external {
+        refunds[recipient] += amount;
+    }
+}
+Example: skip_failed_recipients.sol (safe — denial_of_service)
+Type: safe
+Notes:
+If pushing is required, isolate calls and skip failures gracefully.
+soliditypragma solidity ^0.8.20;
+
+contract GracefulDistributor {
+    address[] public recipients;
+    mapping(address => uint256) public pending;
+
+    function distribute() external {
+        for (uint i = 0; i < recipients.length; i++) {
+            address recipient = recipients[i];
+            uint256 amount = pending[recipient];
+            if (amount == 0) continue;
+
+            pending[recipient] = 0;
+            (bool success, ) = recipient.call{value: amount}("");
+            if (!success) {
+                pending[recipient] = amount; // Restore on failure
+            }
+        }
+    }
+}

@@ -1,0 +1,70 @@
+Vaulnerability Name: Reentrancy
+Title: Reentrancy
+
+Relationships:
+- Related Concept: Checks-Effects-Interactions (CEI)
+- Related Concept: Reentrancy Guard
+
+Description:
+Reentrancy attacks exploit external calls made by smart contracts before they update their own state. The called contract can recursively call back into the caller contract’s function, repeating the same function in a loop. This can result in significant financial losses as the attacker drains the contract’s funds through repeated withdrawals.
+
+The infamous DAO hack in 2016 is one of the earliest examples of reentrancy attacks. The DAO, a decentralized investment fund, had raised over $150 million in Ether before the reentrancy attack. A reentrancy vulnerability allowed the attacker to recursively call the withdrawal function and withdraw around 3.6 million Ether.
+
+The hack was later resolved with a hard fork in the Ethereum blockchain to restore stolen funds, resulting in two separate chains: Ethereum (ETH) and Ethereum Classic (ETC).
+
+Remediation:
+Implement the CEI (checks-effects-interactions) security pattern to ensure that the contract makes state changes before calling external contracts. Reentrancy guards like OpenZeppelin’s nonReentrant modifier can further prevent recursive calls by locking the contract during function execution. Carry out smart contract audits to help identify and rectify potential reentrancy vulnerabilities before deployment.
+
+References:
+- The DAO Reentrancy Attack (2016)
+
+Vulnerable Example:
+pragma solidity ^0.8.0;
+
+contract VulnerableReentrancy {
+    mapping(address => uint256) public balances;
+
+    function deposit() public payable {
+        balances[msg.sender] += msg.value;
+    }
+
+    // Vulnerability: external call before updating state
+    function withdraw() public {
+        uint256 amount = balances[msg.sender];
+        require(amount > 0, "No balance");
+
+        // External call made before state change
+        (bool success, ) = msg.sender.call{value: amount}("");
+        require(success, "Transfer failed");
+
+        // State update happens after the call, enabling recursive withdrawals
+        balances[msg.sender] = 0;
+    }
+}
+
+Fixed Example:
+pragma solidity ^0.8.0;
+
+contract SafeReentrancy {
+    mapping(address => uint256) public balances;
+    bool internal locked;
+
+    modifier nonReentrant() {
+        require(!locked, "Reentrant call");
+        locked = true;
+        _;
+        locked = false;
+    }
+
+    function withdraw() public nonReentrant {
+        uint256 amount = balances[msg.sender];
+        require(amount > 0, "No balance");
+
+        // CEI pattern: update state first
+        balances[msg.sender] = 0;
+
+        // Then interact with external contract
+        (bool success, ) = msg.sender.call{value: amount}("");
+        require(success, "Transfer failed");
+    }
+}

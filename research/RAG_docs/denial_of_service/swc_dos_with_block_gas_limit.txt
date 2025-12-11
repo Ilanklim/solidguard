@@ -1,0 +1,123 @@
+Vaulnerability Name: denial_of_service
+Title: SWC-128 DoS With Block Gas Limit
+
+Relationships
+
+CWE-400: Uncontrolled Resource Consumption
+EEA EthTrust Security Levels:
+[Q] Manage Gas Usage Increases
+Description
+
+When smart contracts are deployed or functions inside them are called, the execution of these actions always requires a certain amount of gas, based of how much computation is needed to complete them. The Ethereum network specifies a block gas limit and the sum of all transactions included in a block can not exceed the threshold.
+
+Programming patterns that are harmless in centralized applications can lead to Denial of Service conditions in smart contracts when the cost of executing a function exceeds the block gas limit. Modifying an array of unknown size, that increases in size over time, can lead to such a Denial of Service condition.
+
+Remediation
+
+Caution is advised when you expect to have large arrays that grow over time. Actions that require looping across the entire data structure should be avoided.
+
+If you absolutely must loop over an array of unknown size, then you should plan for it to potentially take multiple blocks, and therefore require multiple transactions.
+
+References
+
+Ethereum Design Rationale
+Ethereum Yellow Paper
+Clear Large Array Without Blowing Gas Limit
+GovernMental jackpot payout DoS Gas
+Samples
+
+dos_address.sol
+
+pragma solidity ^0.4.25;
+
+contract DosGas {
+
+    address[] creditorAddresses;
+    bool win = false;
+
+    function emptyCreditors() public {
+        if(creditorAddresses.length>1500) {
+            creditorAddresses = new address[](0);
+            win = true;
+        }
+    }
+
+    function addCreditors() public returns (bool) {
+        for(uint i=0;i<350;i++) {
+          creditorAddresses.push(msg.sender);
+        }
+        return true;
+    }
+
+    function iWin() public view returns (bool) {
+        return win;
+    }
+
+    function numberCreditors() public view returns (uint) {
+        return creditorAddresses.length;
+    }
+}
+dos_number.sol
+
+pragma solidity ^0.4.25;
+
+contract DosNumber {
+
+    uint numElements = 0;
+    uint[] array;
+
+    function insertNnumbers(uint value,uint numbers) public {
+
+        // Gas DOS if number > 382 more or less, it depends on actual gas limit
+        for(uint i=0;i<numbers;i++) {
+            if(numElements == array.length) {
+                array.length += 1;
+            }
+            array[numElements++] = value;
+        }
+    }
+
+    function clear() public {
+        require(numElements>1500);
+        numElements = 0;
+    }
+
+    // Gas DOS clear
+    function clearDOS() public {
+
+        // number depends on actual gas limit
+        require(numElements>1500);
+        array = new uint[](0);
+        numElements = 0;
+    }
+
+    function getLengthArray() public view returns(uint) {
+        return numElements;
+    }
+
+    function getRealLengthArray() public view returns(uint) {
+        return array.length;
+    }
+}
+dos_simple.sol
+
+pragma solidity ^0.4.25;
+
+contract DosOneFunc {
+
+    address[] listAddresses;
+
+    function ifillArray() public returns (bool){
+        if(listAddresses.length<1500) {
+
+            for(uint i=0;i<350;i++) {
+                listAddresses.push(msg.sender);
+            }
+            return true;
+
+        } else {
+            listAddresses = new address[](0);
+            return false;
+        }
+    }
+}

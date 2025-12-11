@@ -1,0 +1,160 @@
+Vulnerability Name: unencrypted_private_data
+Title: Unencrypted Private Data On-Chain (AttackType: unencrypted_private_data)
+SWC: SWC-136
+CWE: CWE-312 (Cleartext Storage of Sensitive Information), CWE-767 (Access to Critical Private Variable via Public Method)
+
+Description
+-----------
+Many developers mistakenly believe that variables declared as private or internal in Solidity are hidden from the outside world. This is false. All data stored in contract storage is publicly readable via web3.eth.getStorageAt(), debug_traceTransaction, or simply by inspecting historical transactions. Storing unencrypted secrets (private keys, random seeds, game moves, passwords, etc.) on-chain makes them immediately visible to anyone — including attackers and front-runners.
+
+Key Patterns
+------------
+- Storing plaintext secrets in private/internal state variables
+- Using private arrays/mappings to "hide" game moves, bids, or answers
+- Assuming private == encrypted or inaccessible
+- Storing seeds, salts, or pre-images used for randomness or commitments
+
+Impact
+------
+- Front-running or griefing (e.g., second player always wins)
+- Complete loss of game fairness
+- Exposure of sensitive user data
+- Broken cryptographic protocols
+
+Remediation
+-----------
+- Never store unencrypted secrets on-chain
+- Use commit-reveal schemes for games, voting, or randomness
+- Store only hashes (keccak256, sha256) during commit phase
+- Keep true secrets off-chain until reveal phase
+- For true privacy: use zero-knowledge proofs, encrypted channels, or off-chain computation
+
+References
+----------
+- SWC Registry: Unencrypted Private Data On-Chain
+  https://swc-registry.io/docs/SWC-136
+- ConsenSys: Keeping Secrets in Ethereum
+  https://media.consensys.net/keeping-secrets-in-ethereum-3f7d2b1c5c5
+- OpenZeppelin Security Guidelines — Privacy
+  https://docs.openzeppelin.com/contracts/4.x/security#privacy
+
+Samples
+=======
+
+Example: odd_even.sol (vulnerable — unencrypted_private_data)
+Type: vulnerable
+Notes:
+Player numbers are stored in private array → still visible on-chain. Second player (or anyone) can read the first player's number and always win.
+```solidity
+pragma solidity ^0.5.0;
+
+contract OddEven {
+    struct Player {
+        address addr;
+        uint number;  // Stored plaintext → visible via getStorageAt
+    }
+    Player[2] private players;  // "private" does NOT hide data!
+    uint count = 0;
+
+    function play(uint number) public payable {
+        require(msg.value == 1 ether);
+        players[count] = Player(msg.sender, number);
+        count++;
+        if (count == 2) selectWinner();
+    }
+
+    function selectWinner() private {
+        uint n = players[0].number + players[1].number;
+        (bool success, ) = players[n % 2].addr.call.value(address(this).balance)("");
+        require(success);
+        delete players;
+        count = 0;
+    }
+}
+Example: private_password.sol (vulnerable — unencrypted_private_data)
+Type: vulnerable
+Notes:
+Password stored in private variable → trivially readable by anyone.
+soliditypragma solidity ^0.8.20;
+
+contract Vault {
+    bytes32 private password = "supersecret123";  // Fully public!
+
+    function unlock(bytes32 input) public view {
+        require(password == input, "Wrong password");
+        // grant access
+    }
+}
+Example: odd_even_fixed.sol (safe — unencrypted_private_data)
+Type: safe
+Notes:
+Proper commit-reveal scheme. Numbers are never stored in plaintext. Only hashes are on-chain until reveal phase.
+soliditypragma solidity ^0.5.0;
+
+contract OddEven {
+    enum Stage { FirstCommit, SecondCommit, FirstReveal, SecondReveal, Distribution }
+    struct Player {
+        address addr;
+        bytes32 commitment;  // hash(number, blindingFactor)
+        bool revealed;
+        uint number;
+    }
+    Player[2] private players;
+    Stage public stage = Stage.FirstCommit;
+
+    function play(bytes32 commitment) public payable {
+        require(msg.value == 2 ether);
+        uint idx = stage == Stage.FirstCommit ? 0 : 1;
+        require(stage == Stage.FirstCommit || stage == Stage.SecondCommit);
+        players[idx] = Player(msg.sender, commitment, false, 0);
+
+        if (stage == Stage.FirstCommit) stage = Stage.SecondCommit;
+        else stage = Stage.FirstReveal;
+    }
+
+    function reveal(uint number, bytes32 blindingFactor) public {
+        require(stage == Stage.FirstReveal || stage == Stage.SecondReveal);
+        uint idx = players[0].addr == msg.sender ? 0 : 1;
+        Player storage p = players[idx];
+
+        require(!p.revealed);
+        require(keccak256(abi.encodePacked(msg.sender, number, blindingFactor)) == p.commitment);
+
+        p.number = number;
+        p.revealed = true;
+
+        if (stage == Stage.FirstReveal) stage = Stage.SecondReveal;
+        else stage = Stage.Distribution;
+    }
+
+    function distribute() public {
+        require(stage == Stage.Distribution);
+        uint n = players[0].number + players[1].number;
+        players[n % 2].addr.call.value(3 ether)("");      // Winner gets 3 ETH
+        players[(n + 1) % 2].addr.call.value(1 ether)(""); // Loser gets bond back
+        delete players;
+        stage = Stage.FirstCommit;
+    }
+}
+Example: commit_reveal_generic.sol (safe — unencrypted_private_data)
+Type: safe
+Notes:
+Generic pattern for any secret submission (RPS, auctions, voting).
+soliditypragma solidity ^0.8.20;
+
+contract CommitReveal {
+    mapping(address => bytes32) public commitments;
+    mapping(address => bool) public revealed;
+    mapping(address => uint) public secrets;
+
+    function commit(bytes32 hashedSecret) external {
+        commitments[msg.sender] = hashedSecret;
+    }
+
+    function reveal(uint secret, bytes32 salt) external {
+        require(keccak256(abi.encodePacked(secret, salt, msg.sender)) == commitments[msg.sender]);
+        require(!revealed[msg.sender]);
+        revealed[msg.sender] = true;
+        secrets[msg.sender] = secret;
+    }
+}

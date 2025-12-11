@@ -1,0 +1,225 @@
+Vulnerability Name: arithmetic
+Title: Integer Overflow and Underflow (AttackType: arithmetic)
+SWC: SWC-101
+CWE: CWE-682 (Incorrect Calculation), CWE-190 (Integer Overflow or Wraparound)
+
+Description
+-----------
+In Solidity versions before 0.8.0, arithmetic operations on integer types (uint256, uint8, int, etc.) wrap around silently on overflow or underflow. This means adding 1 to uint256.max results in 0, and subtracting 1 from 0 results in uint256.max. Such unintended wrapping can lead to critical bugs: incorrect balances, broken access control, infinite loops, or exploitable logic errors.
+
+Key Patterns
+------------
+- Direct use of +, -, *, /, **, +=, -=, *= on integer types in Solidity <0.8
+- No SafeMath or built-in overflow checks
+- Large user-controlled inputs used in arithmetic (especially multiplication or exponentiation)
+- Subtraction without ensuring a >= b
+- Addition without ensuring no wraparound to zero or unexpected values
+- Relying on wrapping behavior for security (e.g., "time locks" using overflow)
+
+Impact
+------
+Attackers can:
+- Mint unlimited tokens via overflow in multiplication or addition
+- Drain funds by underflowing balances to max values
+- Bypass balance checks or time locks
+- Cause denial-of-service via infinite loops or reverted transactions in fixed versions
+
+Remediation
+-----------
+- Use Solidity >=0.8.0 — unchecked arithmetic is opt-in, checked by default
+- For older versions: always use OpenZeppelin SafeMath (or equivalent) for all arithmetic
+- In Solidity >=0.8, wrap sensitive operations in unchecked {} only if overflow is intended and safe
+- Validate inputs and use require() with meaningful messages
+- Prefer built-in checked arithmetic unless you explicitly need wrapping behavior
+
+References
+----------
+- SWC Registry: Integer Overflow and Underflow
+  https://swc-registry.io/docs/SWC-101
+- OpenZeppelin SafeMath (for <0.8)
+  https://docs.openzeppelin.com/contracts/4.x/utilities#math
+
+Samples
+=======
+
+Example: tokensalechallenge.sol (vulnerable — arithmetic)
+Type: vulnerable
+Notes:
+Classic real-world exploit. In buy(), msg.value == numTokens * PRICE_PER_TOKEN can be satisfied with overflow: numTokens = 2^256 / 1ether + 1 → underpriced tokens → balance overflow → drain via sell().
+```solidity
+pragma solidity ^0.4.21;
+
+contract TokenSaleChallenge {
+    mapping(address => uint256) public balanceOf;
+    uint256 constant PRICE_PER_TOKEN = 1 ether;
+
+    function buy(uint256 numTokens) public payable {
+        require(msg.value == numTokens * PRICE_PER_TOKEN);  // overflow possible
+        balanceOf[msg.sender] += numTokens;
+    }
+
+    function sell(uint256 numTokens) public {
+        require(balanceOf[msg.sender] >= numTokens);
+        balanceOf[msg.sender] -= numTokens;
+        msg.sender.transfer(numTokens * PRICE_PER_TOKEN);
+    }
+}
+Example: overflow_simple_add.sol (vulnerable — arithmetic)
+Type: vulnerable
+Notes:
+Simple addition overflow: balance + large deposit wraps around to small value.
+soliditypragma solidity ^0.4.24;
+
+contract Overflow_Add {
+    uint public balance = 1;
+
+    function add(uint256 deposit) public {
+        balance += deposit;  // overflow possible
+    }
+}
+Example: overflow_simple_add_fixed.sol (fixed — arithmetic)
+Type: fixed
+Notes:
+Uses SafeMath.add() with overflow check.
+soliditypragma solidity ^0.4.24;
+
+contract Overflow_Add {
+    uint public balance = 1;
+
+    function add(uint256 deposit) public {
+        balance = add(balance, deposit);
+    }
+
+    function add(uint256 a, uint256 b) internal pure returns (uint256) {
+        uint256 c = a + b;
+        require(c >= a);
+        return c;
+    }
+}
+Example: integer_overflow_mul.sol (vulnerable — arithmetic)
+Type: vulnerable
+Notes:
+Multiplication overflow: count *= input wraps on large input.
+soliditypragma solidity ^0.4.19;
+
+contract IntegerOverflowMul {
+    uint public count = 2;
+
+    function run(uint256 input) public {
+        count *= input;  // overflow possible
+    }
+}
+Example: integer_overflow_mul_fixed.sol (fixed — arithmetic)
+Type: fixed
+Notes:
+Safe multiplication with overflow check.
+soliditypragma solidity ^0.4.19;
+
+contract IntegerOverflowMul {
+    uint public count = 2;
+
+    function run(uint256 input) public {
+        count = mul(count, input);
+    }
+
+    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+        if (a == 0) return 0;
+        uint256 c = a * b;
+        require(c / a == b);
+        return c;
+    }
+}
+Example: integer_overflow_minimal.sol (vulnerable — arithmetic)
+Type: vulnerable
+Notes:
+Underflow in subtraction: count -= input wraps from 1 to huge number.
+soliditypragma solidity ^0.4.19;
+
+contract IntegerOverflowMinimal {
+    uint public count = 1;
+
+    function run(uint256 input) public {
+        count -= input;  // underflow possible
+    }
+}
+Example: integer_overflow_minimal_fixed.sol (fixed — arithmetic)
+Type: fixed
+Notes:
+Safe subtraction using require().
+soliditypragma solidity ^0.4.19;
+
+contract IntegerOverflowMinimal {
+    uint public count = 1;
+
+    function run(uint256 input) public {
+        count = sub(count, input);
+    }
+
+    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+        require(b <= a);
+        return a - b;
+    }
+}
+Example: BECToken.sol (vulnerable — arithmetic)
+Type: vulnerable
+Notes:
+Real-world disaster (BEC token). batchTransfer() computes amount = receivers.length * _value without overflow protection → attacker sets cnt = 0, then overflows amount → drains sender balance.
+soliditypragma solidity ^0.4.16;
+
+contract PausableToken {
+    mapping(address => uint256) balances;
+
+    function batchTransfer(address[] _receivers, uint256 _value) public returns (bool) {
+        uint cnt = _receivers.length;
+        uint256 amount = uint256(cnt) * _value;  // overflow here
+        require(cnt > 0 && cnt <= 20);
+        require(_value > 0 && balances[msg.sender] >= amount);
+
+        balances[msg.sender] = balances[msg.sender].sub(amount);
+        for (uint i = 0; i < cnt; i++) {
+            balances[_receivers[i]] = balances[_receivers[i]].add(_value);
+        }
+        return true;
+    }
+}
+Example: integer_overflow_multitx_onefunc_feasible.sol (vulnerable — arithmetic)
+Type: vulnerable
+Notes:
+Multi-transaction underflow after initialization — realistic attack surface.
+soliditypragma solidity ^0.4.23;
+
+contract IntegerOverflowMultiTxOneFuncFeasible {
+    uint256 private initialized = 0;
+    uint256 public count = 1;
+
+    function run(uint256 input) public {
+        if (initialized == 0) {
+            initialized = 1;
+            return;
+        }
+        count -= input;  // underflow on second call
+    }
+}
+Example: integer_overflow_multitx_onefunc_feasible_fixed.sol (safe — arithmetic)
+Type: safe
+Notes:
+Protected with SafeMath-style subtraction.
+soliditypragma solidity ^0.4.23;
+
+contract IntegerOverflowMultiTxOneFuncFeasible {
+    uint256 private initialized = 0;
+    uint256 public count = 1;
+
+    function run(uint256 input) public {
+        if (initialized == 0) {
+            initialized = 1;
+            return;
+        }
+        count = sub(count, input);
+    }
+
+    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+        require(b <= a);
+        return a - b;
+    }
+}

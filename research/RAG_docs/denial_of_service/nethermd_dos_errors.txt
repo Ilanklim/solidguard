@@ -1,0 +1,82 @@
+Vaulnerability Name: denial_of_service
+Title: Denial of Service (DoS)
+
+Relationships:
+- Related Concept: Failing External Calls
+- Related Concept: Reverts Blocking Contract Execution
+
+Description:
+Denial of Service (DoS) attacks aim to make a smart contract unusable. A DoS attack can take many shapes and can be any type of vulnerability that can render the whole protocol or parts of it unusable. These attacks prevent legitimate users from accessing or interacting with the contract, disrupting normal operations.
+
+For example, in the King of Ether game, a user becomes “king” by sending the highest ETH amount to the contract. A malicious king could exploit this by deploying a contract with a receive() function that always reverts. When another player attempts to overthrow the king, the transaction fails as the ETH cannot be sent back, effectively locking in the malicious king and causing a denial-of-service (DoS) attack that prevents others from playing.
+
+Remediation:
+DoS vulnerability can come in different forms and there isn’t a one-size-fits-all solution to prevent them. The best way to prevent DoS is through regular code reviews and smart contract audits to deal with any security loophole.
+
+References:
+- King of Ether DoS Example
+- Ethernaut Challenge Level 9
+
+Vulnerable Example:
+pragma solidity ^0.8.0;
+
+contract KingOfEther {
+    address public king;
+    uint256 public highestBid;
+
+    constructor() {
+        king = msg.sender;
+        highestBid = 0;
+    }
+
+    // Vulnerability described: ETH must be sent back to current king
+    function becomeKing() public payable {
+        require(msg.value > highestBid, "Bid too low");
+
+        // Attempt to return ETH to previous king
+        // If the previous king is a contract that always reverts, this call fails
+        (bool success, ) = king.call{value: highestBid}("");
+        require(success, "Failed to dethrone current king");
+
+        king = msg.sender;
+        highestBid = msg.value;
+    }
+}
+
+// Malicious contract whose receive() always reverts
+contract MaliciousKing {
+    receive() external payable {
+        revert("I refuse to be dethroned");
+    }
+}
+
+Fixed Example:
+pragma solidity ^0.8.0;
+
+contract SafeKingOfEther {
+    address public king;
+    uint256 public highestBid;
+
+    constructor() {
+        king = msg.sender;
+        highestBid = 0;
+    }
+
+    // Avoid sending ETH back directly to dethroned king during state transitions
+    function becomeKing() public payable {
+        require(msg.value > highestBid, "Bid too low");
+
+        // State change first
+        address previousKing = king;
+        king = msg.sender;
+        highestBid = msg.value;
+
+        // ETH withdrawal moved to a pull-payment model to prevent DoS
+        // Previous king must withdraw manually
+    }
+
+    function withdraw() public {
+        require(msg.sender != king, "Current king cannot withdraw");
+        // Logic for safe withdrawal would go here
+    }
+}
