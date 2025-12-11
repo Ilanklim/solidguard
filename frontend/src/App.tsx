@@ -10,7 +10,6 @@ import { CodeEditorSkeleton } from "@/components/SkeletonLoader";
 
 import { useAnalyzeContract } from "@/hooks/useAnalyzeContract";
 import { useGenerateContract } from "@/hooks/useGenerateContract";
-import { useRealtimeAnalysis } from "@/hooks/useRealtimeAnalysis";
 
 export default function App() {
   // ============================================================================
@@ -46,13 +45,6 @@ export default function App() {
   }, [generated, clearResult]);
 
   // ============================================================================
-  //                              DISPLAYED RESULTS
-  // ============================================================================
-  const displayResult = result;
-
-  const displayAttacks: any[] = displayResult?.attacks || [];
-
-  // ============================================================================
   //                                      UI
   // ============================================================================
   return (
@@ -86,7 +78,7 @@ export default function App() {
             <CodeEditor
               value={code}
               onChange={setCode}
-              attacks={displayAttacks}
+              attacks={result?.attacks}
             />
           )}
         </div>
@@ -95,7 +87,7 @@ export default function App() {
         <div className="w-1/3 p-4 overflow-auto">
           <ResultsPanel
             isLoading={isLoading}
-            result={displayResult}
+            result={result}
           />
         </div>
       </div>

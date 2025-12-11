@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
+from fastapi.middleware.cors import CORSMiddleware
 
 # Import classifier
 from contract_classifier import (
@@ -30,9 +30,14 @@ app = FastAPI(
 
 
 # ---------------------- CORS -----------------------
+# Allow CORS from common local frontend origins (Vite / React dev servers)
+# This enables the browser to call the backend at localhost:8000 from the
+# frontend dev server (e.g. http://localhost:5173).
+# Allow all origins so the backend can be called from any deployed frontend.
+# Note: this sets CORS headers to permit cross-origin browser requests.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -78,7 +78,9 @@ def enforce_json_completion(model: str, prompt: str) -> dict:
         temperature=0.0,
     )
     raw = resp.choices[0].message.content
-    return json.loads(raw)  # will raise JSONDecodeError if invalid
+    if raw is None:
+        raise RuntimeError("LLM returned no content (None). Cannot parse JSON.")
+    return json.loads(raw)
 
 
 # ---------------------------------------------
