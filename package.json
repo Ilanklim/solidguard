@@ -1,5 +1,8 @@
 {
   "dependencies": {
     "@radix-ui/react-select": "^2.2.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.1"
   }
 }
