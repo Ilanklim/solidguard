@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { API_BASE_URL } from "@/config/api";
 
 export function useAnalyzeContract() {
   const [isLoading, setIsLoading] = useState(false);
@@ -12,7 +13,7 @@ export function useAnalyzeContract() {
     setIsLoading(true);
 
     try {
-      const res = await fetch("http://localhost:8000/classify", {
+      const res = await fetch(`${API_BASE_URL}/classify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

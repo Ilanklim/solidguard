@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { API_BASE_URL } from "@/config/api";
 
 interface GeneratedContract {
   metadata: string;     // JSON string returned by backend
@@ -14,7 +15,7 @@ export function useGenerateContract() {
     setGenerated(null);
 
     try {
-      const res = await fetch("http://localhost:8000/generate", {
+      const res = await fetch(`${API_BASE_URL}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
