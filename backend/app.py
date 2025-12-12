@@ -2,16 +2,23 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
+import sys
+import os
 
 # Import classifier
-from contract_classifier import (
+from backend.contract_classifier import (
     classify_raw_contract_text,
     classify_rag_contract_text,
 )
 
 # Import generator
-from contract_generator import generate_malicious_contract
+from backend.contract_generator import generate_malicious_contract
 
+ROOT = os.path.dirname(os.path.abspath(__file__))
+PARENT = os.path.dirname(ROOT)
+
+if PARENT not in sys.path:
+    sys.path.append(PARENT)
 
 ALLOWED_MODELS = ["gpt-4.1", "gpt-4.1-mini", "gpt-5.1"]
 
@@ -28,13 +35,6 @@ app = FastAPI(
     version="2.0.0"
 )
 
-
-# ---------------------- CORS -----------------------
-# Allow CORS from common local frontend origins (Vite / React dev servers)
-# This enables the browser to call the backend at localhost:8000 from the
-# frontend dev server (e.g. http://localhost:5173).
-# Allow all origins so the backend can be called from any deployed frontend.
-# Note: this sets CORS headers to permit cross-origin browser requests.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -122,4 +122,4 @@ def generate(req: GenerationRequest):
 
 # ---------- Local Debug ----------
 if __name__ == "__main__":
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("backend.app:app", host="0.0.0.0", port=8000, reload=True)

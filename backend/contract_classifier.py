@@ -20,6 +20,7 @@ import json
 from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
+from backend.retrieve_embeddings import KnowledgeStore
 
 # Load environment
 LOCAL_ROOT = Path(__file__).resolve().parents[0]
@@ -50,7 +51,6 @@ RAW_PROMPT = (LOCAL_ROOT / "prompts" / "classify_raw.txt").read_text(encoding="u
 RAG_PROMPT = (LOCAL_ROOT / "prompts" / "classify_rag.txt").read_text(encoding="utf-8")
 
 # For RAG retrieval
-from retrieve_embeddings import KnowledgeStore  # noqa: E402
 KS = KnowledgeStore(path=LOCAL_ROOT / "knowledge_store.jsonl")
 KS.load()
 

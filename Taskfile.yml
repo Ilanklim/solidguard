@@ -75,11 +75,9 @@ tasks:
 
   backend:
     desc: "Start FastAPI backend"
-    dir: backend
     cmds:
       - echo "🚀 Starting backend at http://localhost:8000"
-      - ../.venv/bin/uvicorn app:app --reload --host 0.0.0.0 --port 8000
-
+      - .venv/bin/uvicorn backend.app:app --reload --host 0.0.0.0 --port 8000
 
 
   frontend:
@@ -117,23 +115,19 @@ tasks:
     cmds:
       - echo "🛑 Stopping services..."
 
-      # Kill ONLY the uvicorn started by this project
       - |
         echo "🔪 Killing uvicorn..."
-        pgrep -f "uvicorn app:app" | xargs kill -9 2>/dev/null || true
+        pgrep -f "backend.app:app" | xargs kill -9 2>/dev/null || true
 
-      # Kill Python in this repo only
       - |
         echo "🔪 Killing Python backend..."
-        pkill -f "/proj-02-extra-parliament/backend" || true
+        pkill -f "backend/app.py" || true
 
-      # Kill Bun/Vite only for this repo
       - |
         echo "🔪 Killing frontend..."
         pgrep -f "bun dev" | xargs kill -9 2>/dev/null || true
         pgrep -f "vite" | xargs kill -9 2>/dev/null || true
 
-      # Free ports
       - |
         echo "🧹 Freeing ports 8000 and 8080..."
         lsof -ti :8000 | xargs kill -9 2>/dev/null || true
